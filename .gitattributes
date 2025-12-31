@@ -1,0 +1,9 @@
+# Windows 批处理文件必须使用 CRLF 换行符
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Python 文件使用 LF
+*.py text eol=lf
+
+# 默认自动处理
+* text=auto
