@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 ### 2. 配置 SQLMap
 
-将 sqlmap 解压到程序目录内的 `sqlmap` 文件夹：
+创建一个sqlmap文件夹 将 SQLmap 解压到程序目录内的 `sqlmap` 文件夹：
 
 ```
 sqlmap_gui_v2/
