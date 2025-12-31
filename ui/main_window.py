@@ -462,6 +462,17 @@ class MainWindow(QMainWindow):
         builder.set_flush_session(self.advanced_panel.is_flush_session())
         builder.set_fresh_queries(self.advanced_panel.is_fresh_queries())
         
+        # 新增：表单、爬取、智能模式等
+        if self.advanced_panel.is_forms():
+            builder.set_forms(True)
+        crawl = self.advanced_panel.get_crawl()
+        if crawl > 0:
+            builder.set_crawl(crawl)
+        if self.advanced_panel.is_smart():
+            builder.set_smart(True)
+        if self.advanced_panel.is_text_only():
+            builder.set_text_only(True)
+        
         # 绕过设置
         tamper = self.advanced_panel.get_tamper()
         if tamper:
@@ -475,7 +486,8 @@ class MainWindow(QMainWindow):
             builder.set_random_agent(True)
         
         if self.advanced_panel.use_tor():
-            builder.set_tor(True)
+            tor_type = self.advanced_panel.get_tor_type()
+            builder.set_tor(True, tor_type)
         
         if self.advanced_panel.is_mobile():
             builder.set_mobile(True)
@@ -485,6 +497,10 @@ class MainWindow(QMainWindow):
         
         if self.advanced_panel.use_chunked():
             builder.set_chunked(True)
+        
+        # 新增：跳过WAF检测
+        if self.advanced_panel.is_skip_waf():
+            builder.set_skip_waf(True)
         
         # 数据库指定
         dbms = self.advanced_panel.get_dbms()
@@ -508,6 +524,10 @@ class MainWindow(QMainWindow):
         if self.advanced_panel.get_os_shell():
             builder.os_shell(True)
         
+        # 新增：OOB Shell
+        if self.advanced_panel.get_os_pwn():
+            builder.os_pwn(True)
+        
         os_cmd = self.advanced_panel.get_os_cmd()
         if os_cmd:
             builder.os_cmd(os_cmd)
@@ -515,6 +535,11 @@ class MainWindow(QMainWindow):
         file_read = self.advanced_panel.get_file_read()
         if file_read:
             builder.file_read(file_read)
+        
+        # 新增：文件写入
+        file_local, file_remote = self.advanced_panel.get_file_write()
+        if file_local and file_remote:
+            builder.file_write(file_local, file_remote)
         
         return builder.build()
     

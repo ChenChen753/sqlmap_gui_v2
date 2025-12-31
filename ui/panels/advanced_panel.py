@@ -608,3 +608,55 @@ class AdvancedPanel(QWidget):
         if self.file_read_check.isChecked():
             return self.file_read_input.text().strip()
         return ""
+    
+    # ==================== 新增缺失的方法 ====================
+    
+    def is_forms(self) -> bool:
+        """是否解析表单"""
+        return self.forms_check.isChecked()
+    
+    def get_crawl(self) -> int:
+        """获取爬取深度"""
+        if self.crawl_check.isChecked():
+            return 3  # 默认深度
+        return 0
+    
+    def is_smart(self) -> bool:
+        """是否智能模式"""
+        return self.smart_check.isChecked()
+    
+    def is_null_connection(self) -> bool:
+        """是否空连接检测"""
+        return self.null_connection_check.isChecked()
+    
+    def is_text_only(self) -> bool:
+        """是否仅文本"""
+        return self.text_only_check.isChecked()
+    
+    def is_no_cast(self) -> bool:
+        """是否禁用转换"""
+        return self.no_cast_check.isChecked()
+    
+    def is_skip_waf(self) -> bool:
+        """是否跳过WAF检测"""
+        return self.skip_waf_check.isChecked()
+    
+    def get_os_pwn(self) -> bool:
+        """是否获取OOB Shell"""
+        return self.os_pwn_check.isChecked()
+    
+    def get_file_write(self) -> tuple:
+        """获取文件写入配置 (本地路径, 远程路径)"""
+        if self.file_write_check.isChecked():
+            text = self.file_write_input.text().strip()
+            if "->" in text:
+                parts = text.split("->")
+                return parts[0].strip(), parts[1].strip()
+        return "", ""
+    
+    def get_tor_type(self) -> str:
+        """获取Tor类型"""
+        if self.tor_check.isChecked():
+            return self.tor_type_combo.currentText()
+        return ""
+
