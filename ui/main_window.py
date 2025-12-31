@@ -427,6 +427,15 @@ class MainWindow(QMainWindow):
         string_match = self.scan_panel.get_string_match()
         if string_match:
             builder.set_string_match(string_match)
+            
+        # 注入前缀/后缀
+        prefix = self.advanced_panel.get_prefix()
+        if prefix:
+            builder.set_prefix(prefix)
+            
+        suffix = self.advanced_panel.get_suffix()
+        if suffix:
+            builder.set_suffix(suffix)
         
         # 信息获取
         builder.get_current_db(self.scan_panel.get_current_db())

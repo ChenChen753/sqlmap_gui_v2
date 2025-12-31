@@ -75,6 +75,8 @@ class CommandBuilder:
         self._skip_waf = False
         self._csrf_token = ""
         self._csrf_url = ""
+        self._prefix = ""
+        self._suffix = ""
         
         # 信息查询
         self._current_db = False
@@ -206,6 +208,16 @@ class CommandBuilder:
     def set_text_only(self, enabled: bool = True) -> 'CommandBuilder':
         """仅比较文本内容"""
         self._text_only = enabled
+        return self
+    
+    def set_prefix(self, prefix: str) -> 'CommandBuilder':
+        """设置注入前缀"""
+        self._prefix = prefix
+        return self
+    
+    def set_suffix(self, suffix: str) -> 'CommandBuilder':
+        """设置注入后缀"""
+        self._suffix = suffix
         return self
     
     # ==================== 性能设置 ====================
@@ -606,8 +618,15 @@ class CommandBuilder:
             parts.append(f'--os="{self._os}"')
         
         # 字符串匹配
+        # 字符串匹配
         if self._string_match:
             parts.append(f'--string="{self._string_match}"')
+        
+        # 注入前缀/后缀
+        if self._prefix:
+            parts.append(f'--prefix="{self._prefix}"')
+        if self._suffix:
+            parts.append(f'--suffix="{self._suffix}"')
         
         # 性能
         if self._threads > 1:

@@ -204,6 +204,27 @@ class AdvancedPanel(QWidget):
         general_card.add_layout(general_grid)
         layout.addWidget(general_card)
         
+        # ==================== 注入载荷设置卡片 ====================
+        payload_card = CardWidget("🪄 注入载荷设置")
+        
+        payload_grid = QGridLayout()
+        payload_grid.setSpacing(10)
+        
+        payload_grid.addWidget(QLabel("注入前缀 (--prefix):"), 0, 0)
+        self.prefix_input = QLineEdit()
+        self.prefix_input.setPlaceholderText("例如: '")
+        self.prefix_input.setToolTip("闭合前面的查询语句")
+        payload_grid.addWidget(self.prefix_input, 0, 1)
+        
+        payload_grid.addWidget(QLabel("注入后缀 (--suffix):"), 0, 2)
+        self.suffix_input = QLineEdit()
+        self.suffix_input.setPlaceholderText("例如: -- -")
+        self.suffix_input.setToolTip("注释后面的查询语句")
+        payload_grid.addWidget(self.suffix_input, 0, 3)
+        
+        payload_card.add_layout(payload_grid)
+        layout.addWidget(payload_card)
+        
         # ==================== Tamper 脚本卡片 ====================
         tamper_card = CardWidget("🛡️ Tamper 绕过脚本")
         
@@ -659,4 +680,12 @@ class AdvancedPanel(QWidget):
         if self.tor_check.isChecked():
             return self.tor_type_combo.currentText()
         return ""
+    
+    def get_prefix(self) -> str:
+        """获取注入前缀"""
+        return self.prefix_input.text().strip()
+    
+    def get_suffix(self) -> str:
+        """获取注入后缀"""
+        return self.suffix_input.text().strip()
 
