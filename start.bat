@@ -1,39 +1,38 @@
 @echo off
-chcp 65001 >nul 2>&1
 title SQLMap GUI v2
 
 echo ========================================
-echo   SQLMap GUI v2 - 智能 SQL 注入检测工�?
+echo   SQLMap GUI v2 - SQL Injection Tool
 echo ========================================
 echo.
 
-REM 切换到脚本所在目录（这是最重要的一步）
+REM Switch to script directory
 cd /d "%~dp0"
 
-REM 检�?Python
+REM Check Python
 where python >nul 2>&1
 if errorlevel 1 (
-    echo [错误] 未找�?Python，请先安�?Python 3.7+
-    echo 下载地址: https://www.python.org/downloads/
+    echo [ERROR] Python not found. Please install Python 3.7+
+    echo Download: https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-REM 检查依�?
-echo [信息] 检查依�?..
+REM Check dependencies
+echo [INFO] Checking dependencies...
 python -c "import PyQt6" >nul 2>&1
 if errorlevel 1 (
-    echo [信息] 正在安装 PyQt6...
+    echo [INFO] Installing PyQt6...
     pip install PyQt6 -q
 )
 
-REM 启动程序
-echo [信息] 启动 SQLMap GUI v2...
+REM Start program
+echo [INFO] Starting SQLMap GUI v2...
 echo.
 python main.py
 
 if errorlevel 1 (
     echo.
-    echo [错误] 程序异常退�?
+    echo [ERROR] Program exited with error
     pause
 )
