@@ -169,10 +169,14 @@ class SqlmapEngine(QThread):
     def _save_data_buffer(self):
         """保存数据缓冲区中的数据"""
         self._parsing_data = False
+        self._in_data_grid = False
         if hasattr(self, '_data_buffer') and self._data_buffer:
             table_name = getattr(self, '_current_dump_table', 'data')
+            row_count = len(self._data_buffer)
             # 使用替换而不是累加，避免重复数据
             self.results['data'][table_name] = self._data_buffer.copy()
+            # 输出调试信息
+            self.output_received.emit(f"[数据] 表 '{table_name}' 提取了 {row_count} 条记录\n")
             self._data_buffer = []
     
     def _parse_output(self, line: str):
@@ -205,13 +209,18 @@ class SqlmapEngine(QThread):
             if match:
                 self.results['dbms'] = match.group(1).strip().strip("'")
         
-        # 提取当前数据库
-        if "current database" in line.lower():
-            match = re.search(r"current database[:\s]+['\"]?([^'\"]+)['\"]?", line, re.IGNORECASE)
+        # 提取当前数据库 - 只匹配 "current database: 'xxx'" 格式（必须有冒号）
+        # 排除警告信息如 "use the current database to enumerate"
+        if "current database:" in line.lower():
+            # 只匹配带冒号的格式
+            match = re.search(r"current database:\s*['\"]?(\w+)['\"]?", line, re.IGNORECASE)
             if match:
                 db = match.group(1).strip()
-                if db and db not in ['NULL', 'None', '']:
+                # 验证是有效的数据库名（不包含无效关键词）
+                invalid_words = ['to', 'the', 'enumerate', 'entries', 'table', 'NULL', 'None']
+                if db and db.lower() not in invalid_words and ' ' not in db:
                     self.results['current_db'] = db
+                    self._current_parsing_db = db  # 同时设置当前解析数据库
                     if db not in self.results['databases']:
                         self.results['databases'].append(db)
         
@@ -234,28 +243,51 @@ class SqlmapEngine(QThread):
             elif line.startswith("[*]"):
                 db = line[3:].strip().strip("'\"")
                 # 更严格的数据库名过滤
-                invalid_names = ['NULL', 'None', '', 'Database', 'available', 'fetching', 
-                               'the back-end', 'web server', 'web application', 'target',
-                               'starting', 'testing', 'heuristic', 'information_schema']
-                if db and not any(inv.lower() in db.lower() for inv in invalid_names):
-                    # 检查是否是有效的数据库名格式（不包含太多特殊字符）
-                    if len(db) < 64 and not db.startswith('[') and ':' not in db:
+                invalid_patterns = [
+                    'NULL', 'None', '', 'Database', 'available', 'fetching', 
+                    'the back-end', 'web server', 'web application', 'target',
+                    'starting', 'testing', 'heuristic', 'information_schema',
+                    'enumerate', 'entries', 'table(s)', 'tables'  # 添加更多无效关键词
+                ]
+                if db and not any(inv.lower() in db.lower() for inv in invalid_patterns):
+                    # 检查是否是有效的数据库名格式（不包含太多特殊字符和空格）
+                    if len(db) < 64 and not db.startswith('[') and ':' not in db and ' ' not in db:
                         if db not in self.results['databases']:
                             self.results['databases'].append(db)
         
         # 检测表列表开始 - 格式: "Database: xxx" 后面跟着表格
-        if "Database:" in line and "tables" not in line.lower():
+        # 注意：只匹配单独的 "Database: xxx" 行，不是警告信息
+        if "Database:" in line and "tables" not in line.lower() and "enumerate" not in line.lower():
             match = re.search(r"Database:\s*(\S+)", line)
             if match:
                 db_name = match.group(1).strip().strip("'\"")
-                self._current_parsing_db = db_name
-                if db_name not in self.results['databases']:
-                    self.results['databases'].append(db_name)
-                if db_name not in self.results['tables']:
-                    self.results['tables'][db_name] = []
+                # 验证数据库名不包含无效关键词
+                if db_name and ' ' not in db_name and 'enumerate' not in db_name.lower():
+                    self._current_parsing_db = db_name
+                    if db_name not in self.results['databases']:
+                        self.results['databases'].append(db_name)
+                    if db_name not in self.results['tables']:
+                        self.results['tables'][db_name] = []
         
-        # 检测表列表开始 - 格式: "[X tables]" 或 "X tables"
-        if re.search(r'\[\d+\s+tables?\]', line.lower()) or "fetching tables" in line.lower():
+        # 检测表列表开始 - 格式: "[X tables]" 或 "fetching tables for database: 'xxx'"
+        # 同时从 fetching tables 行提取数据库名
+        if "fetching tables" in line.lower():
+            # 尝试从 "fetching tables for database: 'xxx'" 提取数据库名
+            # 只匹配 "database:" 后面跟着冒号的格式，避免匹配 "database to"
+            db_match = re.search(r"database:\s*['\"]?(\w+)['\"]?", line, re.IGNORECASE)
+            if db_match:
+                db_name = db_match.group(1).strip()
+                if db_name and db_name.lower() not in ['to', 'the', 'enumerate']:
+                    self._current_parsing_db = db_name
+                    if db_name not in self.results['databases']:
+                        self.results['databases'].append(db_name)
+                    if db_name not in self.results['tables']:
+                        self.results['tables'][db_name] = []
+            self._parsing_tables = True
+            self._parsing_columns = False
+            self._parsing_databases = False
+            self._in_table_grid = False
+        elif re.search(r'\[\d+\s+tables?\]', line.lower()):
             self._parsing_tables = True
             self._parsing_columns = False
             self._parsing_databases = False
@@ -269,6 +301,21 @@ class SqlmapEngine(QThread):
             if hasattr(self, '_parsing_columns') and self._parsing_columns:
                 self._in_column_grid = not getattr(self, '_in_column_grid', False)
         
+        # 解析表名 - 从 "[INFO] retrieved: 'xxx'" 格式获取（当正在获取表时）
+        if hasattr(self, '_parsing_tables') and self._parsing_tables:
+            if "retrieved:" in line.lower():
+                # 提取 retrieved: 'table_name' 格式
+                match = re.search(r"retrieved:\s*['\"]?(\w+)['\"]?", line, re.IGNORECASE)
+                if match:
+                    table_name = match.group(1).strip()
+                    if table_name and len(table_name) > 0:
+                        # 使用正确的数据库名（优先 _current_parsing_db，否则用 current_db）
+                        db = getattr(self, '_current_parsing_db', None) or self.results.get('current_db', 'default')
+                        if db not in self.results['tables']:
+                            self.results['tables'][db] = []
+                        if table_name not in self.results['tables'][db]:
+                            self.results['tables'][db].append(table_name)
+        
         # 解析表格格式的表名: | table_name |
         if hasattr(self, '_parsing_tables') and self._parsing_tables:
             if line.startswith("|") and not line.startswith("+-"):
@@ -278,13 +325,14 @@ class SqlmapEngine(QThread):
                     table_name = parts[0].strip()
                     # 过滤掉表头和无效项
                     if table_name and table_name.lower() not in ['table', 'tables', '']:
-                        db = getattr(self, '_current_parsing_db', 'default')
+                        # 使用正确的数据库名
+                        db = getattr(self, '_current_parsing_db', None) or self.results.get('current_db', 'default')
                         if db not in self.results['tables']:
                             self.results['tables'][db] = []
                         if table_name not in self.results['tables'][db]:
                             self.results['tables'][db].append(table_name)
             # 检测表列表结束
-            if line.startswith("[") and "INFO" in line:
+            if line.startswith("[") and "INFO" in line and "retrieved" not in line.lower():
                 self._parsing_tables = False
                 self._in_table_grid = False
         
@@ -329,45 +377,82 @@ class SqlmapEngine(QThread):
         
         # 检测数据提取开始 - 格式: "dumping entries for table" 或 "[X entries]" 或 "Table:"
         if "dumping entries" in line.lower() or "fetching entries" in line.lower():
+            # 先保存之前的缓冲区
+            self._save_data_buffer()
             self._parsing_data = True
             self._data_buffer = []
-            # 提取表名
-            match = re.search(r'table[`\'\"\s]+(\S+)[`\'\"\s]*', line, re.IGNORECASE)
-            if match:
-                self._current_dump_table = match.group(1).strip().strip("'\"`.`")
+            self._in_data_grid = False
+            # 提取表名 - 优先匹配引号内的表名
+            table_name = None
+            # 匹配 'db.table' 或 "db.table" 或 `db.table` 格式
+            quote_patterns = [
+                r"'([^']+)'",      # 'table_name' 或 'db.table'
+                r'"([^"]+)"',      # "table_name"
+                r'`([^`]+)`',      # `table_name`
+            ]
+            for pattern in quote_patterns:
+                match = re.search(pattern, line)
+                if match:
+                    table_name = match.group(1).strip()
+                    break
+            
+            if not table_name:
+                # 尝试匹配 "table xxx" 格式
+                match = re.search(r'table\s+(\S+)', line, re.IGNORECASE)
+                if match:
+                    table_name = match.group(1).strip().strip("'\"`.`")
+            
+            # 提取真正的表名（去掉可能的数据库前缀保留格式如 db.table）
+            if table_name:
+                # 去掉多余的引号和反引号
+                table_name = table_name.strip("'\"`.`")
+                self._current_dump_table = table_name
             else:
                 self._current_dump_table = "unknown"
         
         # 检测数据条目数量
-        if re.search(r'\[\d+\s+entries?\]', line.lower()):
+        entries_match = re.search(r'\[(\d+)\s+entries?\]', line.lower())
+        if entries_match:
             self._parsing_data = True
+            self._in_data_grid = False
             if not hasattr(self, '_data_buffer'):
                 self._data_buffer = []
         
         # 检测 "Table: xxx" 格式开始数据输出
         if line.strip().startswith("Table:") and "dump" not in line.lower():
-            match = re.search(r'Table:\s*(\S+)', line)
+            match = re.search(r'Table:\s*([^\s]+)', line)
             if match:
                 # 先保存之前的数据
                 self._save_data_buffer()
                 self._parsing_data = True
                 self._data_buffer = []
-                self._current_dump_table = match.group(1).strip().strip("'\"`.`")
+                self._in_data_grid = False
+                # 清理表名 - 去掉引号
+                table_name = match.group(1).strip().strip("'\"`.`")
+                self._current_dump_table = table_name
         
         # 解析提取的数据行 (表格格式)
         if hasattr(self, '_parsing_data') and self._parsing_data:
-            if line.startswith("|") and not line.startswith("+-"):
+            # 检测表格边界线
+            if line.startswith("+-"):
+                if not hasattr(self, '_in_data_grid'):
+                    self._in_data_grid = False
+                self._in_data_grid = not self._in_data_grid
+                # 如果表格结束，保存数据
+                if not self._in_data_grid and hasattr(self, '_data_buffer') and self._data_buffer:
+                    # 不要在这里保存，等待下一个表格开始或扫描结束时保存
+                    pass
+            elif line.startswith("|") and not line.startswith("+-"):
                 parts = [p.strip() for p in line.split("|") if p.strip()]
                 if parts:
                     row_data = " | ".join(parts)
                     if not hasattr(self, '_data_buffer'):
                         self._data_buffer = []
                     self._data_buffer.append(row_data)
-            elif line.startswith("+-"):
-                pass  # 表格分隔线，忽略
             elif line.startswith("[") and ("INFO" in line or "WARNING" in line):
-                # 检测数据段结束
-                if "dump" in line.lower() or "file" in line.lower() or "table" in line.lower() or "fetched" in line.lower():
+                # 检测数据段结束 - 更精确的条件
+                end_keywords = ["dump", "file", "table", "fetched", "stored", "written", "entries"]
+                if any(kw in line.lower() for kw in end_keywords):
                     self._save_data_buffer()
         
         # 进度估算

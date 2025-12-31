@@ -28,17 +28,38 @@ class DataDetailDialog(QDialog):
         self.resize(900, 600)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # 设置对话框样式
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1a1a2e;
+            }
+            QLabel {
+                color: #E0E0E0;
+            }
+            QPushButton {
+                background-color: #2d3a4a;
+                color: #FFFFFF;
+                border: 1px solid #4FC3F7;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #3d4a5a;
+            }
+        """)
         
         # 标题
         title = QLabel(f"🗄️ {self.table_name}")
-        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
         
-        # 统计信息
-        count_label = QLabel(f"共 {len(self.data)} 条记录")
-        count_label.setStyleSheet("color: #888; font-size: 12px;")
+        # 统计信息 - 更清晰的描述
+        count_label = QLabel(f"📊 共 {len(self.data)} 条数据记录")
+        count_label.setStyleSheet("color: #4FC3F7; font-size: 13px; padding: 5px 0;")
         layout.addWidget(count_label)
         
         # 解析数据并显示
@@ -97,31 +118,56 @@ class DataDetailDialog(QDialog):
         table.setRowCount(len(rows))
         table.setHorizontalHeaderLabels(headers)
         
+        # 隐藏行号（垂直表头）
+        table.verticalHeader().setVisible(False)
+        
         # 填充数据
         for i, row in enumerate(rows):
             for j, cell in enumerate(row):
                 if j < len(headers):
                     item = QTableWidgetItem(cell)
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                     table.setItem(i, j, item)
         
-        # 设置样式
+        # 设置样式 - 统一深色背景
         table.horizontalHeader().setStretchLastSection(True)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         table.setAlternatingRowColors(True)
         table.setStyleSheet("""
             QTableWidget {
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 12px;
-                gridline-color: #444;
+                font-family: 'Consolas', 'Courier New', 'Microsoft YaHei', monospace;
+                font-size: 13px;
+                background-color: #1a1a2e;
+                alternate-background-color: #232340;
+                gridline-color: #3a3a5a;
+                border: 1px solid #3a3a5a;
+                border-radius: 4px;
+                color: #E0E0E0;
             }
             QTableWidget::item {
-                padding: 5px;
+                padding: 6px 10px;
+                color: #E0E0E0;
+                border-bottom: 1px solid #2a2a4a;
+            }
+            QTableWidget::item:alternate {
+                background-color: #232340;
+            }
+            QTableWidget::item:selected {
+                background-color: #3a4a6a;
+                color: #FFFFFF;
             }
             QHeaderView::section {
-                background-color: #2d2d2d;
-                padding: 5px;
-                border: 1px solid #444;
+                background-color: #2a3a50;
+                color: #4FC3F7;
+                padding: 8px 10px;
+                border: none;
+                border-bottom: 2px solid #4FC3F7;
                 font-weight: bold;
+                font-size: 13px;
+            }
+            QTableCornerButton::section {
+                background-color: #1a1a2e;
+                border: none;
             }
         """)
         
@@ -153,7 +199,7 @@ class DataDetailDialog(QDialog):
 
 
 class ColumnDataDialog(QDialog):
-    """列详情对话框"""
+    """列详情对话框 - 显示表结构信息"""
     
     def __init__(self, db_name: str, table_name: str, columns: list, parent=None):
         super().__init__(parent)
@@ -165,57 +211,112 @@ class ColumnDataDialog(QDialog):
     def setup_ui(self):
         """设置 UI"""
         self.setWindowTitle(f"📋 表结构: {self.db_name}.{self.table_name}")
-        self.setMinimumSize(500, 400)
-        self.resize(600, 500)
+        self.setMinimumSize(600, 450)
+        self.resize(700, 550)
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+        
+        # 设置对话框背景色
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1a1a2e;
+            }
+            QLabel {
+                color: #E0E0E0;
+            }
+            QPushButton {
+                background-color: #2d3a4a;
+                color: #FFFFFF;
+                border: 1px solid #4FC3F7;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #3d4a5a;
+            }
+        """)
         
         # 标题
         title = QLabel(f"🗄️ {self.db_name}.{self.table_name}")
-        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E0E0;")
         layout.addWidget(title)
         
-        # 统计信息
-        count_label = QLabel(f"共 {len(self.columns)} 个字段")
-        count_label.setStyleSheet("color: #888; font-size: 12px;")
+        # 统计信息 - 明确说明数字含义
+        count_label = QLabel(f"📊 当前表共有 {len(self.columns)} 个字段（列）")
+        count_label.setStyleSheet("color: #4FC3F7; font-size: 13px; padding: 5px 0;")
         layout.addWidget(count_label)
         
         # 创建表格
         table = QTableWidget()
         table.setColumnCount(2)
         table.setRowCount(len(self.columns))
-        table.setHorizontalHeaderLabels(["字段名", "类型"])
+        table.setHorizontalHeaderLabels(["Column", "Type"])
         
-        # 隐藏行号
+        # 隐藏行号（垂直表头）
         table.verticalHeader().setVisible(False)
         
+        # 禁用选择功能，避免显示复选框
+        table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        
+        # 填充数据
         for i, col in enumerate(self.columns):
             if isinstance(col, tuple):
-                table.setItem(i, 0, QTableWidgetItem(col[0]))
-                table.setItem(i, 1, QTableWidgetItem(col[1]))
+                name_item = QTableWidgetItem(col[0])
+                type_item = QTableWidgetItem(col[1])
             else:
-                table.setItem(i, 0, QTableWidgetItem(str(col)))
-                table.setItem(i, 1, QTableWidgetItem(""))
+                name_item = QTableWidgetItem(str(col))
+                type_item = QTableWidgetItem("")
+            
+            # 设置文本对齐方式
+            name_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            type_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            
+            table.setItem(i, 0, name_item)
+            table.setItem(i, 1, type_item)
         
-        # 设置列宽
-        table.setColumnWidth(0, 200)
+        # 设置列宽 - 按比例分配
+        table.setColumnWidth(0, 280)  # 字段名列宽度增加
+        table.setColumnWidth(1, 350)  # 类型列宽度增加
         table.horizontalHeader().setStretchLastSection(True)
         table.setAlternatingRowColors(True)
+        
+        # 设置行高
+        for i in range(table.rowCount()):
+            table.setRowHeight(i, 32)
+        
+        # 优化表格样式 - 高对比度配色，确保清晰可读
         table.setStyleSheet("""
             QTableWidget {
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 12px;
+                font-family: 'Consolas', 'Courier New', 'Microsoft YaHei', monospace;
+                font-size: 14px;
+                background-color: #0d0d0d;
+                alternate-background-color: #1a1a1a;
+                gridline-color: #444;
+                border: 1px solid #555;
+                border-radius: 4px;
+                selection-background-color: transparent;
             }
             QTableWidget::item {
-                padding: 5px;
+                padding: 8px 12px;
+                color: #FFFFFF;
+                border-bottom: 1px solid #333;
+            }
+            QTableWidget::item:alternate {
+                background-color: #1a1a1a;
+                color: #FFFFFF;
             }
             QHeaderView::section {
-                background-color: #2d2d2d;
-                padding: 5px;
-                border: 1px solid #444;
+                background-color: #2a3a50;
+                color: #FFFFFF;
+                padding: 10px 12px;
+                border: none;
+                border-bottom: 2px solid #4FC3F7;
                 font-weight: bold;
+                font-size: 14px;
             }
         """)
         

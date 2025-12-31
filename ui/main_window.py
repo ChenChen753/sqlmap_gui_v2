@@ -688,19 +688,12 @@ class MainWindow(QMainWindow):
             
             self.result_panel.set_injection_info("\n".join(info))
         
-        # 更新数据库列表
-        if results.get('databases'):
-            self.result_panel.set_databases(results['databases'])
-        
-        # 更新表列表 - 合并所有数据库的表
-        all_tables = []
+        # 获取表数据
         tables_dict = results.get('tables', {})
-        if tables_dict:
-            for db_name, tables in tables_dict.items():
-                for table in tables:
-                    all_tables.append(f"{db_name}.{table}")
-            if all_tables:
-                self.result_panel.set_tables(all_tables)
+        
+        # 更新数据库列表（同时传入表数据，实现点击联动）
+        if results.get('databases'):
+            self.result_panel.set_databases_with_tables(results['databases'], tables_dict)
         
         # 更新列列表 - 合并所有表的列
         all_columns = []
@@ -720,6 +713,16 @@ class MainWindow(QMainWindow):
         if data_dict:
             # 存储数据供双击查看使用
             self.result_panel.set_extracted_data(data_dict)
+            
+            # 同时将有数据的表添加到表列表中（如果还没有的话）
+            for table_name in data_dict.keys():
+                # 如果表名包含数据库前缀（如 patient.mg_doctor），只取表名部分
+                if '.' in table_name:
+                    pure_table_name = table_name.split('.')[-1]
+                else:
+                    pure_table_name = table_name
+                # 添加到表列表（避免重复）
+                self.result_panel.add_table_if_not_exists(pure_table_name)
             
             data_text = []
             for table_name, rows in data_dict.items():

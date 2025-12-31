@@ -192,17 +192,105 @@ class ResultPanel(QWidget):
         layout.addLayout(export_layout)
     
     def _on_db_clicked(self, item, column):
-        """数据库点击"""
-        db_name = item.text(0)
+        """数据库点击 - 更新表列表显示该数据库的表"""
+        db_name = item.text(0).strip()  # 确保没有多余空格
+        self._update_tables_for_db(db_name)
         self.db_selected.emit(db_name)
     
+    def _update_tables_for_db(self, db_name: str):
+        """更新表列表，只显示指定数据库的表"""
+        self.table_tree.clear()
+        self.column_tree.clear()
+        
+        if not hasattr(self, '_tables_data') or not self._tables_data:
+            # 没有表数据，显示提示
+            hint_item = QTreeWidgetItem(["(暂无表数据)"])
+            self.table_tree.addTopLevelItem(hint_item)
+            return
+        
+        # 查找该数据库的表 - 先尝试精确匹配
+        tables = self._tables_data.get(db_name, [])
+        
+        # 如果精确匹配找不到，尝试遍历查找
+        if not tables:
+            for key, value in self._tables_data.items():
+                if key.lower() == db_name.lower() or db_name.lower() in key.lower():
+                    tables = value
+                    break
+        
+        # 如果还是找不到，且只有一个数据库，直接使用它
+        if not tables and len(self._tables_data) == 1:
+            tables = list(self._tables_data.values())[0]
+        
+        if tables:
+            for table in tables:
+                item = QTreeWidgetItem([table])
+                self.table_tree.addTopLevelItem(item)
+            # 添加字段提示
+            hint_item = QTreeWidgetItem(["(点击左侧表名查看字段)", ""])
+            self.column_tree.addTopLevelItem(hint_item)
+        else:
+            # 没有表，显示提示
+            hint_item = QTreeWidgetItem(["(该数据库暂无表数据)"])
+            self.table_tree.addTopLevelItem(hint_item)
+    
     def _on_table_clicked(self, item, column):
-        """表点击"""
-        table_name = item.text(0)
-        # 获取当前选中的数据库
-        db_item = self.db_tree.currentItem()
-        if db_item:
-            self.table_selected.emit(db_item.text(0), table_name)
+        """表点击 - 更新字段列表显示该表的字段"""
+        full_table_name = item.text(0)  # 格式可能是: db.table 或 table 或其他
+        
+        # 提取数据库名和表名
+        if "." in full_table_name:
+            # 尝试从完整名称中提取
+            parts = full_table_name.rsplit(".", 1)
+            db_name = parts[0]
+            table_name = parts[1]
+        else:
+            table_name = full_table_name
+            # 尝试从数据库树获取数据库名
+            db_item = self.db_tree.currentItem()
+            db_name = db_item.text(0) if db_item else ""
+        
+        # 查找并显示该表的字段
+        self._update_columns_for_table(db_name, table_name, full_table_name)
+        
+        # 发送信号
+        self.table_selected.emit(db_name, table_name)
+    
+    def _update_columns_for_table(self, db_name: str, table_name: str, full_table_name: str):
+        """更新字段列表，只显示指定表的字段"""
+        self.column_tree.clear()
+        
+        if not self._columns_data:
+            return
+        
+        # 尝试多种匹配方式查找列数据
+        matched_columns = None
+        
+        for (db, tbl), cols in self._columns_data.items():
+            # 精确匹配
+            if db == db_name and tbl == table_name:
+                matched_columns = cols
+                break
+            # 表名匹配
+            if tbl == table_name:
+                matched_columns = cols
+                break
+            # 完整名称匹配
+            if f"{db}.{tbl}" == full_table_name:
+                matched_columns = cols
+                break
+            # 表名在完整名称中
+            if tbl in full_table_name:
+                matched_columns = cols
+                break
+        
+        if matched_columns:
+            for col in matched_columns:
+                if isinstance(col, tuple):
+                    item = QTreeWidgetItem([col[0], col[1]])
+                else:
+                    item = QTreeWidgetItem([str(col), ""])
+                self.column_tree.addTopLevelItem(item)
     
     def _on_table_double_clicked(self, item, column):
         """表双击 - 显示表数据"""
@@ -215,6 +303,9 @@ class ResultPanel(QWidget):
             table_name = full_table_name
             db_name = ""
         
+        # 调试：打印可用的数据键
+        available_keys = list(self._extracted_data.keys()) if self._extracted_data else []
+        
         # 查找表数据 - 使用多种匹配方式
         table_data = self._find_table_data(full_table_name, db_name, table_name)
         
@@ -225,22 +316,31 @@ class ResultPanel(QWidget):
         else:
             # 检查是否有列信息
             column_data = None
+            matched_db = db_name
             for (db, tbl), cols in self._columns_data.items():
-                if tbl == table_name or f"{db}.{tbl}" == full_table_name:
+                # 更灵活的匹配
+                if tbl == table_name or f"{db}.{tbl}" == full_table_name or tbl in full_table_name:
                     column_data = cols
-                    db_name = db
+                    matched_db = db
                     break
             
             if column_data:
                 # 显示列详情
-                dialog = ColumnDataDialog(db_name, table_name, column_data, self)
+                dialog = ColumnDataDialog(matched_db, table_name, column_data, self)
                 dialog.exec()
             else:
-                QMessageBox.information(
-                    self, "提示", 
-                    f"表 '{full_table_name}' 暂无提取数据。\n\n"
-                    "请先使用 --dump 选项提取数据。"
-                )
+                # 显示更详细的调试信息
+                debug_info = f"表 '{full_table_name}' 暂无提取数据。\n\n"
+                if available_keys:
+                    debug_info += f"已提取的数据表：\n"
+                    for k in available_keys[:10]:  # 最多显示10个
+                        debug_info += f"  • {k}\n"
+                    if len(available_keys) > 10:
+                        debug_info += f"  ... 共 {len(available_keys)} 个表\n"
+                else:
+                    debug_info += "当前没有已提取的数据。\n请使用 --dump 选项提取数据。"
+                
+                QMessageBox.information(self, "提示", debug_info)
     
     def _find_table_data(self, full_table_name: str, db_name: str, table_name: str):
         """查找表数据 - 使用多种匹配方式"""
@@ -396,12 +496,89 @@ class ResultPanel(QWidget):
         for db in databases:
             self.add_database(db)
     
+    def set_databases_with_tables(self, databases: list, tables_dict: dict):
+        """设置数据库列表并存储表数据，实现点击联动"""
+        self.db_tree.clear()
+        
+        # 确保存储的表数据键名没有多余空格
+        cleaned_tables_data = {}
+        if tables_dict:
+            for k, v in tables_dict.items():
+                cleaned_tables_data[k.strip()] = v
+        
+        # 如果新数据为空但旧数据存在，保留旧数据（防止意外覆盖）
+        if not cleaned_tables_data and hasattr(self, '_tables_data') and self._tables_data:
+            pass  # 保留旧数据
+        else:
+            self._tables_data = cleaned_tables_data
+            
+        # 确保 databases 列表也经过处理
+        cleaned_databases = [db.strip() for db in databases]
+        
+        for db in cleaned_databases:
+            self.add_database(db)
+        
+        # 如果有数据库，默认选中第一个并显示其表
+        if cleaned_databases:
+            first_db = cleaned_databases[0]
+            # 选中第一个数据库
+            first_item = self.db_tree.topLevelItem(0)
+            if first_item:
+                self.db_tree.setCurrentItem(first_item)
+            # 显示第一个数据库的表
+            self._update_tables_for_db(first_db)
+            
+            # 如果有多个数据库，显示提示
+            if len(cleaned_databases) > 1:
+                # 在表列表顶部添加提示
+                hint_item = QTreeWidgetItem([f"💡 当前显示 {first_db} 的表，点击左侧数据库切换"])
+                self.table_tree.insertTopLevelItem(0, hint_item)
+    
     def set_tables(self, tables: list):
         """设置表列表"""
         self.table_tree.clear()
         for table in tables:
             item = QTreeWidgetItem([table])
             self.table_tree.addTopLevelItem(item)
+    
+    def add_table_if_not_exists(self, table_name: str, db_name: str = None):
+        """添加表到列表（如果不存在），同时更新 _tables_data"""
+        table_name = table_name.strip()
+        
+        # 检查是否已存在于 UI
+        for i in range(self.table_tree.topLevelItemCount()):
+            existing_item = self.table_tree.topLevelItem(i)
+            if existing_item and existing_item.text(0) == table_name:
+                # 即使 UI 中存在，也要确保 _tables_data 中有记录
+                break
+        else:
+            # 添加新表到 UI
+            item = QTreeWidgetItem([table_name])
+            self.table_tree.addTopLevelItem(item)
+        
+        # 同时更新 _tables_data（获取当前选中的数据库或使用传入的 db_name）
+        if db_name is None:
+            # 尝试获取当前选中的数据库
+            current_db_item = self.db_tree.currentItem()
+            if current_db_item:
+                db_name = current_db_item.text(0).strip()
+            else:
+                # 如果没有选中，尝试获取第一个数据库
+                first_item = self.db_tree.topLevelItem(0)
+                if first_item:
+                    db_name = first_item.text(0).strip()
+                else:
+                    db_name = "default"
+        
+        # 确保 _tables_data 存在
+        if not hasattr(self, '_tables_data'):
+            self._tables_data = {}
+        
+        # 更新 _tables_data
+        if db_name not in self._tables_data:
+            self._tables_data[db_name] = []
+        if table_name not in self._tables_data[db_name]:
+            self._tables_data[db_name].append(table_name)
     
     def set_columns(self, columns: list):
         """设置列列表"""
@@ -414,15 +591,13 @@ class ResultPanel(QWidget):
             self.column_tree.addTopLevelItem(item)
     
     def set_columns_with_data(self, columns: list, columns_dict: dict):
-        """设置列列表并存储列数据"""
+        """设置列列表并存储列数据（不立即显示，等待点击表时显示）"""
         self.column_tree.clear()
         self._columns_data = columns_dict
-        for col in columns:
-            if isinstance(col, tuple):
-                item = QTreeWidgetItem([col[0], col[1]])
-            else:
-                item = QTreeWidgetItem([col, ""])
-            self.column_tree.addTopLevelItem(item)
+        # 不再一次性显示所有列，而是等待用户点击表时显示该表的字段
+        # 添加提示项
+        hint_item = QTreeWidgetItem(["(点击左侧表名查看字段)", ""])
+        self.column_tree.addTopLevelItem(hint_item)
     
     def set_data(self, data: str):
         """设置数据内容"""
