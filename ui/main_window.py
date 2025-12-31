@@ -557,11 +557,21 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "未找到 sqlmap，请检查配置。")
             return
         
-        # 检查目标
-        target = self.target_panel.get_target()
-        if not target:
-            QMessageBox.warning(self, "警告", "请输入目标 URL。")
-            return
+        # 检查目标（根据模式判断）
+        if self.target_panel.is_request_mode():
+            # 请求包模式：检查是否有请求包文件或内容
+            request_file = self.target_panel.get_request_file()
+            request_content = self.target_panel.get_request_content()
+            if not request_file and not request_content:
+                QMessageBox.warning(self, "警告", "请选择请求包文件或粘贴请求包内容。")
+                return
+            target = request_file if request_file else "请求包扫描"
+        else:
+            # URL 模式或批量文件模式
+            target = self.target_panel.get_target()
+            if not target:
+                QMessageBox.warning(self, "警告", "请输入目标 URL。")
+                return
         
         # 构建命令
         try:
