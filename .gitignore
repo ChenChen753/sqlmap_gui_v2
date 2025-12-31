@@ -1,0 +1,38 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 运行时生成的文件
+config.ini
+history.db
+temp_request.txt
+
+# SQLMap 目录（用户需自行下载）
+sqlmap/
+
+# IDE 和编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 虚拟环境
+venv/
+env/
+.venv/
+
+# 打包文件
+dist/
+build/
+*.egg-info/
+
+# 日志文件
+*.log

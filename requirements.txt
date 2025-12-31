@@ -1,0 +1,13 @@
+# SQLMap GUI v2 依赖列表
+# 安装命令: pip install -r requirements.txt
+
+# PyQt6 - 图形界面框架
+PyQt6>=6.4.0
+
+# Python 3.7+ 内置模块（无需安装）:
+# - configparser (配置文件解析)
+# - sqlite3 (数据库)
+# - subprocess (进程管理)
+# - re (正则表达式)
+# - os, sys (系统操作)
+# - datetime (时间处理)
