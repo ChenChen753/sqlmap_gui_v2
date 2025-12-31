@@ -542,21 +542,14 @@ class ResultPanel(QWidget):
             self.table_tree.addTopLevelItem(item)
     
     def add_table_if_not_exists(self, table_name: str, db_name: str = None):
-        """添加表到列表（如果不存在），同时更新 _tables_data"""
+        """添加表到 _tables_data（如果不存在）
+        
+        只更新内部数据存储，不直接修改 UI。
+        UI 只通过 _update_tables_for_db 来更新，确保显示正确的数据库表。
+        """
         table_name = table_name.strip()
         
-        # 检查是否已存在于 UI
-        for i in range(self.table_tree.topLevelItemCount()):
-            existing_item = self.table_tree.topLevelItem(i)
-            if existing_item and existing_item.text(0) == table_name:
-                # 即使 UI 中存在，也要确保 _tables_data 中有记录
-                break
-        else:
-            # 添加新表到 UI
-            item = QTreeWidgetItem([table_name])
-            self.table_tree.addTopLevelItem(item)
-        
-        # 同时更新 _tables_data（获取当前选中的数据库或使用传入的 db_name）
+        # 确定数据库名
         if db_name is None:
             # 尝试获取当前选中的数据库
             current_db_item = self.db_tree.currentItem()
@@ -579,6 +572,21 @@ class ResultPanel(QWidget):
             self._tables_data[db_name] = []
         if table_name not in self._tables_data[db_name]:
             self._tables_data[db_name].append(table_name)
+            
+            # 只有当表属于当前选中的数据库时，才添加到 UI
+            current_db_item = self.db_tree.currentItem()
+            current_db = current_db_item.text(0).strip() if current_db_item else ""
+            if db_name == current_db:
+                # 检查 UI 中是否已存在
+                exists_in_ui = False
+                for i in range(self.table_tree.topLevelItemCount()):
+                    existing_item = self.table_tree.topLevelItem(i)
+                    if existing_item and existing_item.text(0) == table_name:
+                        exists_in_ui = True
+                        break
+                if not exists_in_ui:
+                    item = QTreeWidgetItem([table_name])
+                    self.table_tree.addTopLevelItem(item)
     
     def set_columns(self, columns: list):
         """设置列列表"""

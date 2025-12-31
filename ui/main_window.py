@@ -715,14 +715,18 @@ class MainWindow(QMainWindow):
             self.result_panel.set_extracted_data(data_dict)
             
             # 同时将有数据的表添加到表列表中（如果还没有的话）
+            current_db = results.get('current_db', '')
             for table_name in data_dict.keys():
-                # 如果表名包含数据库前缀（如 patient.mg_doctor），只取表名部分
+                # 如果表名包含数据库前缀（如 patient.mg_doctor），提取数据库名和表名
                 if '.' in table_name:
-                    pure_table_name = table_name.split('.')[-1]
+                    parts = table_name.split('.', 1)
+                    db_name = parts[0]
+                    pure_table_name = parts[1]
                 else:
+                    db_name = current_db if current_db else None
                     pure_table_name = table_name
-                # 添加到表列表（避免重复）
-                self.result_panel.add_table_if_not_exists(pure_table_name)
+                # 添加到表列表（避免重复），传入正确的数据库名
+                self.result_panel.add_table_if_not_exists(pure_table_name, db_name)
             
             data_text = []
             for table_name, rows in data_dict.items():
