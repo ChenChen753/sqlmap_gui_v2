@@ -21,7 +21,9 @@ class ResultPanel(QWidget):
     
     # 信号
     db_selected = pyqtSignal(str)
+
     table_selected = pyqtSignal(str, str)
+    dump_requested = pyqtSignal(str)  # 请求提取数据信号 (db_name)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -451,15 +453,108 @@ class ResultPanel(QWidget):
     
     def _request_dump(self, db_name):
         """请求提取数据"""
-        pass  # TODO: 实现数据提取
+        self.dump_requested.emit(db_name)
     
     def _export_csv(self):
         """导出 CSV"""
-        pass  # TODO: 实现 CSV 导出
+        if not self._extracted_data:
+            QMessageBox.warning(self, "警告", "当前没有已提取的数据可导出。")
+            return
+            
+        from PyQt6.QtWidgets import QFileDialog
+        
+        # 选择保存目录
+        dir_path = QFileDialog.getExistingDirectory(self, "选择保存 CSV 的目录")
+        if not dir_path:
+            return
+            
+        try:
+            import csv
+            import os
+            
+            count = 0
+            for table_name, rows in self._extracted_data.items():
+                # 清理表名作为文件名
+                safe_name = "".join([c for c in table_name if c.isalpha() or c.isdigit() or c in (' ', '-', '_', '.')]).strip()
+                if not safe_name:
+                    safe_name = "unknown_table"
+                
+                file_path = os.path.join(dir_path, f"{safe_name}.csv")
+                
+                with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                    writer = csv.writer(f)
+                    
+                    # 尝试解析每一行
+                    for row in rows:
+                        if isinstance(row, str) and " | " in row:
+                            parts = [p.strip() for p in row.split(" | ")]
+                            writer.writerow(parts)
+                        else:
+                            writer.writerow([row])
+                count += 1
+                
+            QMessageBox.information(self, "成功", f"成功导出 {count} 个表的 CSV 文件。")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
     
     def _export_json(self):
         """导出 JSON"""
-        pass  # TODO: 实现 JSON 导出
+        if not self._extracted_data:
+            QMessageBox.warning(self, "警告", "当前没有已提取的数据可导出。")
+            return
+            
+        from PyQt6.QtWidgets import QFileDialog
+        import json
+        
+        # 选择保存文件
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "保存 JSON", "sqlmap_data.json", "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+            
+        try:
+            # 构造更结构化的数据
+            export_data = {}
+            for table_name, rows in self._extracted_data.items():
+                # 尝试解析
+                parsed_rows = []
+                headers = []
+                
+                for i, row in enumerate(rows):
+                    if isinstance(row, str) and " | " in row:
+                        parts = [p.strip() for p in row.split(" | ")]
+                        
+                        # 尝试识别第一行为表头
+                        if i == 0 and all(not p.isdigit() for p in parts):
+                            headers = parts
+                            continue
+                            
+                        if headers:
+                            # 如果有表头，转为字典
+                            row_dict = {}
+                            for j, val in enumerate(parts):
+                                if j < len(headers):
+                                    row_dict[headers[j]] = val
+                                else:
+                                    row_dict[f"col_{j}"] = val
+                            parsed_rows.append(row_dict)
+                        else:
+                            # 没表头，转为列表
+                            parsed_rows.append(parts)
+                    else:
+                        parsed_rows.append(row)
+                
+                export_data[table_name] = parsed_rows
+            
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+                
+            QMessageBox.information(self, "成功", "数据已成功导出为 JSON。")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
     
     # ==================== 公共方法 ====================
     
@@ -627,6 +722,15 @@ class ResultPanel(QWidget):
         self.update_stats()
     
     def _get_icon(self, icon_type: str):
-        """获取图标（占位）"""
-        # TODO: 实现图标加载
+        """获取图标"""
+        from PyQt6.QtWidgets import QStyle, QApplication
+        
+        style = QApplication.style()
+        if icon_type == "database":
+            return style.standardIcon(QStyle.StandardPixmap.SP_DirIcon)
+        elif icon_type == "table":
+            return style.standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+        elif icon_type == "column":
+            return style.standardIcon(QStyle.StandardPixmap.SP_ArrowRight)
+        
         return None

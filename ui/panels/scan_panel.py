@@ -504,3 +504,11 @@ class ScanPanel(QWidget):
         self.tables_check.setChecked(config.get_bool('Scan', 'tables', False))
         self.columns_check.setChecked(config.get_bool('Scan', 'columns', False))
         self.dump_check.setChecked(config.get_bool('Scan', 'dump', False))
+    
+    def set_dump(self, checked: bool):
+        """设置是否提取数据"""
+        self.dump_check.setChecked(checked)
+    
+    def set_dump_all(self, checked: bool):
+        """设置是否提取全部数据"""
+        self.dump_all_check.setChecked(checked)

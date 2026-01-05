@@ -6,8 +6,7 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QCheckBox, QGridLayout, QSpinBox,
-    QListWidget, QListWidgetItem, QAbstractItemView, QGroupBox,
-    QScrollArea, QFrame
+    QGroupBox, QScrollArea, QFrame
 )
 from PyQt6.QtCore import pyqtSignal, Qt
 
@@ -231,10 +230,16 @@ class AdvancedPanel(QWidget):
         tamper_layout = QVBoxLayout()
         tamper_layout.setSpacing(8)
         
-        # 快速选择
-        quick_layout = QHBoxLayout()
-        quick_layout.addWidget(QLabel("快速选择:"))
+        # 脚本选择按钮行
+        select_layout = QHBoxLayout()
         
+        self.tamper_select_btn = QPushButton("🛡️ 选择绕过脚本...")
+        self.tamper_select_btn.setMinimumWidth(150)
+        self.tamper_select_btn.clicked.connect(self._open_tamper_dialog)
+        select_layout.addWidget(self.tamper_select_btn)
+        
+        # 快速预设
+        select_layout.addWidget(QLabel("快速预设:"))
         self.tamper_preset_combo = QComboBox()
         self.tamper_preset_combo.addItems([
             "-- 选择预设 --",
@@ -246,35 +251,32 @@ class AdvancedPanel(QWidget):
             "全部清除"
         ])
         self.tamper_preset_combo.currentIndexChanged.connect(self._on_preset_changed)
-        quick_layout.addWidget(self.tamper_preset_combo)
-        quick_layout.addStretch()
+        select_layout.addWidget(self.tamper_preset_combo)
         
-        tamper_layout.addLayout(quick_layout)
-        
-        # 分类选择
-        category_layout = QHBoxLayout()
-        category_layout.addWidget(QLabel("分类:"))
-        
-        self.tamper_category_combo = QComboBox()
-        self.tamper_category_combo.addItems(["全部"] + list(TAMPER_SCRIPTS.keys()))
-        self.tamper_category_combo.currentTextChanged.connect(self._filter_tampers)
-        category_layout.addWidget(self.tamper_category_combo)
-        category_layout.addStretch()
+        select_layout.addStretch()
         
         # 已选数量
-        self.selected_count_label = QLabel("已选: 0")
-        self.selected_count_label.setStyleSheet(f"color: {COLORS['accent_blue']};")
-        category_layout.addWidget(self.selected_count_label)
+        self.selected_count_label = QLabel("已选: 0 个脚本")
+        self.selected_count_label.setStyleSheet(f"color: {COLORS['accent_blue']}; font-weight: bold;")
+        select_layout.addWidget(self.selected_count_label)
         
-        tamper_layout.addLayout(category_layout)
+        tamper_layout.addLayout(select_layout)
         
-        # Tamper 列表
-        self.tamper_list = QListWidget()
-        self.tamper_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
-        self.tamper_list.setMaximumHeight(200)
-        self.tamper_list.itemSelectionChanged.connect(self._on_tamper_selection_changed)
-        self._populate_tamper_list()
-        tamper_layout.addWidget(self.tamper_list)
+        # 已选脚本显示区域
+        self.selected_tampers_label = QLabel("暂未选择脚本")
+        self.selected_tampers_label.setWordWrap(True)
+        self.selected_tampers_label.setStyleSheet(f"""
+            color: {COLORS['text_secondary']};
+            background-color: {COLORS['bg_tertiary']};
+            border: 1px solid {COLORS['border']};
+            border-radius: 4px;
+            padding: 8px;
+            min-height: 40px;
+        """)
+        tamper_layout.addWidget(self.selected_tampers_label)
+        
+        # 存储已选脚本列表
+        self._selected_tamper_scripts = []
         
         # 自定义 tamper
         custom_layout = QHBoxLayout()
@@ -460,31 +462,45 @@ class AdvancedPanel(QWidget):
         # 添加弹性空间
         layout.addStretch()
     
-    def _populate_tamper_list(self, category: str = "全部"):
-        """填充 tamper 列表"""
-        self.tamper_list.clear()
+    def _open_tamper_dialog(self):
+        """打开 Tamper 脚本选择对话框"""
+        from ..dialogs.tamper_dialog import TamperSelectionDialog
         
-        if category == "全部":
-            for cat, scripts in TAMPER_SCRIPTS.items():
-                for name, desc in scripts:
-                    item = QListWidgetItem(f"{name} - {desc}")
-                    item.setData(Qt.ItemDataRole.UserRole, name)
-                    self.tamper_list.addItem(item)
-        else:
-            if category in TAMPER_SCRIPTS:
-                for name, desc in TAMPER_SCRIPTS[category]:
-                    item = QListWidgetItem(f"{name} - {desc}")
-                    item.setData(Qt.ItemDataRole.UserRole, name)
-                    self.tamper_list.addItem(item)
+        dialog = TamperSelectionDialog(self, self._selected_tamper_scripts)
+        if dialog.exec() == dialog.DialogCode.Accepted:
+            self._selected_tamper_scripts = dialog.get_selected_scripts()
+            self._update_tamper_display()
     
-    def _filter_tampers(self, category: str):
-        """过滤 tamper 列表"""
-        self._populate_tamper_list(category)
+    def _update_tamper_display(self):
+        """更新已选脚本显示"""
+        count = len(self._selected_tamper_scripts)
+        self.selected_count_label.setText(f"已选: {count} 个脚本")
+        
+        if count == 0:
+            self.selected_tampers_label.setText("暂未选择脚本")
+            self.selected_tampers_label.setStyleSheet(f"""
+                color: {COLORS['text_secondary']};
+                background-color: {COLORS['bg_tertiary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 4px;
+                padding: 8px;
+                min-height: 40px;
+            """)
+        else:
+            # 显示已选脚本名称
+            display_text = ", ".join(self._selected_tamper_scripts)
+            self.selected_tampers_label.setText(display_text)
+            self.selected_tampers_label.setStyleSheet(f"""
+                color: {COLORS['text_primary']};
+                background-color: {COLORS['bg_tertiary']};
+                border: 1px solid {COLORS['accent_blue']};
+                border-radius: 4px;
+                padding: 8px;
+                min-height: 40px;
+            """)
     
     def _on_preset_changed(self, index):
         """预设选择变化"""
-        self.tamper_list.clearSelection()
-        
         presets = {
             1: ["space2comment", "randomcase", "between", "charencode"],  # 通用 WAF
             2: ["space2comment", "randomcase", "versionedkeywords", "space2mysqlblank"],  # MySQL
@@ -493,18 +509,17 @@ class AdvancedPanel(QWidget):
             5: ["charencode", "base64encode", "charunicodeencode", "htmlencode"],  # 编码
         }
         
-        if index in presets:
-            for i in range(self.tamper_list.count()):
-                item = self.tamper_list.item(i)
-                if item.data(Qt.ItemDataRole.UserRole) in presets[index]:
-                    item.setSelected(True)
+        if index == 6:  # 全部清除
+            self._selected_tamper_scripts = []
+        elif index in presets:
+            self._selected_tamper_scripts = presets[index].copy()
         
-        self._on_tamper_selection_changed()
-    
-    def _on_tamper_selection_changed(self):
-        """tamper 选择变化"""
-        count = len(self.tamper_list.selectedItems())
-        self.selected_count_label.setText(f"已选: {count}")
+        self._update_tamper_display()
+        
+        # 重置预设选择
+        self.tamper_preset_combo.blockSignals(True)
+        self.tamper_preset_combo.setCurrentIndex(0)
+        self.tamper_preset_combo.blockSignals(False)
     
     def _on_proxy_check_changed(self, state):
         """代理复选框变化"""
@@ -566,9 +581,7 @@ class AdvancedPanel(QWidget):
     
     def get_tamper(self) -> str:
         """获取选中的 tamper 脚本"""
-        selected = []
-        for item in self.tamper_list.selectedItems():
-            selected.append(item.data(Qt.ItemDataRole.UserRole))
+        selected = self._selected_tamper_scripts.copy()
         
         # 添加自定义 tamper
         custom = self.custom_tamper_input.text().strip()
@@ -688,4 +701,14 @@ class AdvancedPanel(QWidget):
     def get_suffix(self) -> str:
         """获取注入后缀"""
         return self.suffix_input.text().strip()
+
+    def set_target_db(self, db_name: str):
+        """设置目标数据库"""
+        self.target_db_check.setChecked(True)
+        self.target_db_input.setText(db_name)
+    
+    def set_target_table(self, table_name: str):
+        """设置目标表"""
+        self.target_table_check.setChecked(True)
+        self.target_table_input.setText(table_name)
 

@@ -217,6 +217,8 @@ class MainWindow(QMainWindow):
         
         # 结果面板
         self.result_panel = ResultPanel()
+        self.result_panel.db_selected.connect(self._on_db_selected)  # 假设需要处理数据库选择
+        self.result_panel.dump_requested.connect(self._on_dump_requested)
         tabs.addTab(self.result_panel, "📊 结果")
         
         layout.addWidget(tabs)
@@ -836,6 +838,41 @@ class MainWindow(QMainWindow):
         """设置变化"""
         # 重新查找 sqlmap
         self._find_sqlmap()
+    
+    def _on_db_selected(self, db_name: str):
+        """数据库选择变化"""
+        pass
+
+    
+    def _on_dump_requested(self, db_name: str):
+        """处理提取数据请求"""
+        # 1. 确认
+        reply = QMessageBox.question(
+            self, "确认提取", 
+            f"确定要提取数据库 '{db_name}' 的所有数据吗？\n\n这将会启动一个新的扫描任务。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+            
+        # 2. 配置扫描参数
+        # 切换到高级面板设置目标数据库
+        self.advanced_panel.set_target_db(db_name)
+        
+        # 切换到扫描面板设置 dump
+        self.scan_panel.set_dump(True)  # 或者 set_dump_all(True) 取決于需求，这里上下文是提取全部数据
+        # 上下文里的菜单是 "提取全部数据"，所以可能意图是 dump-all 或者是 dump 当前DB的所有表
+        # dump + -D dbname 通常会 dump 该库下所有表
+        
+        # 3. 提示用户
+        QMessageBox.information(
+            self, "准备就绪", 
+            f"已配置提取数据库 '{db_name}' 的参数。\n\n请点击 '开始扫描' 按钮启动任务。"
+        )
+        
+        # 可选：自动点击开始
+        # self.start_scan()
     
     def show_about(self):
         """显示关于"""
