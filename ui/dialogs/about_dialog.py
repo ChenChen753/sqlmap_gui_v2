@@ -6,8 +6,8 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 )
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtGui import QFont, QDesktopServices
 
 from ..theme import COLORS
 
@@ -18,13 +18,13 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("关于 SQLMap GUI v2")
-        self.setFixedSize(450, 400)
+        self.setFixedSize(450, 450)  # 稍微增加高度
         self.setup_ui()
     
     def setup_ui(self):
         """设置 UI"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
+        layout.setSpacing(15)
         layout.setContentsMargins(30, 30, 30, 30)
         
         # Logo 和标题
@@ -77,6 +77,35 @@ class AboutDialog(QDialog):
         """)
         layout.addWidget(author_box)
         
+        # GitHub 链接
+        github_layout = QHBoxLayout()
+        github_layout.addStretch()
+        
+        github_btn = QPushButton("🐙 GitHub 仓库")
+        github_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #24292e;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-size: 13px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #2f363d;
+            }}
+            QPushButton:pressed {{
+                background-color: #1a1e22;
+            }}
+        """)
+        github_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        github_btn.clicked.connect(self._open_github)
+        github_layout.addWidget(github_btn)
+        
+        github_layout.addStretch()
+        layout.addLayout(github_layout)
+        
         # 警告信息
         warning = QLabel("⚠️ 本工具仅供授权安全测试使用")
         warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -98,3 +127,8 @@ class AboutDialog(QDialog):
         btn_layout.addWidget(close_btn)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
+    
+    def _open_github(self):
+        """打开 GitHub 仓库"""
+        QDesktopServices.openUrl(QUrl("https://github.com/ChenChen753/sqlmap_gui_v2"))
+
