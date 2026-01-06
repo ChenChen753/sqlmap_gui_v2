@@ -307,6 +307,23 @@ class AdvancedPanel(QWidget):
         proxy_row.addWidget(self.proxy_input)
         proxy_layout.addLayout(proxy_row)
         
+        # 代理池文件
+        proxy_file_row = QHBoxLayout()
+        self.proxy_file_check = QCheckBox("代理池文件:")
+        self.proxy_file_check.stateChanged.connect(self._on_proxy_file_check_changed)
+        proxy_file_row.addWidget(self.proxy_file_check)
+        
+        self.proxy_file_input = QLineEdit()
+        self.proxy_file_input.setPlaceholderText("选择包含多个代理地址的文件...")
+        self.proxy_file_input.setEnabled(False)
+        proxy_file_row.addWidget(self.proxy_file_input)
+        
+        self.proxy_file_browse_btn = QPushButton("浏览...")
+        self.proxy_file_browse_btn.setEnabled(False)
+        self.proxy_file_browse_btn.clicked.connect(self._browse_proxy_file)
+        proxy_file_row.addWidget(self.proxy_file_browse_btn)
+        proxy_layout.addLayout(proxy_file_row)
+        
         # Tor 设置
         tor_row = QHBoxLayout()
         self.tor_check = QCheckBox("使用 Tor (--tor)")
@@ -321,6 +338,19 @@ class AdvancedPanel(QWidget):
         tor_row.addStretch()
         proxy_layout.addLayout(tor_row)
         
+        # 安全 URL 设置
+        safe_url_row = QHBoxLayout()
+        self.safe_url_check = QCheckBox("安全 URL:")
+        self.safe_url_check.setToolTip("扫描期间定期访问安全 URL 以保持会话")
+        self.safe_url_check.stateChanged.connect(self._on_safe_url_check_changed)
+        safe_url_row.addWidget(self.safe_url_check)
+        
+        self.safe_url_input = QLineEdit()
+        self.safe_url_input.setPlaceholderText("输入安全的 URL 地址...")
+        self.safe_url_input.setEnabled(False)
+        safe_url_row.addWidget(self.safe_url_input)
+        proxy_layout.addLayout(safe_url_row)
+        
         # 其他请求选项
         req_grid = QGridLayout()
         
@@ -329,10 +359,6 @@ class AdvancedPanel(QWidget):
         
         self.mobile_check = QCheckBox("模拟手机 (--mobile)")
         req_grid.addWidget(self.mobile_check, 0, 1)
-        
-        self.safe_url_check = QCheckBox("安全 URL 访问")
-        self.safe_url_check.setToolTip("扫描期间定期访问安全 URL 以保持会话")
-        req_grid.addWidget(self.safe_url_check, 0, 2)
         
         self.skip_waf_check = QCheckBox("跳过 WAF 检测")
         req_grid.addWidget(self.skip_waf_check, 1, 0)
@@ -525,6 +551,26 @@ class AdvancedPanel(QWidget):
         """代理复选框变化"""
         self.proxy_input.setEnabled(state == Qt.CheckState.Checked.value)
     
+    def _on_proxy_file_check_changed(self, state):
+        """代理池文件复选框变化"""
+        enabled = state == Qt.CheckState.Checked.value
+        self.proxy_file_input.setEnabled(enabled)
+        self.proxy_file_browse_btn.setEnabled(enabled)
+    
+    def _browse_proxy_file(self):
+        """浏览代理池文件"""
+        from PyQt6.QtWidgets import QFileDialog
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择代理池文件", "", 
+            "文本文件 (*.txt);;所有文件 (*.*)"
+        )
+        if file_path:
+            self.proxy_file_input.setText(file_path)
+    
+    def _on_safe_url_check_changed(self, state):
+        """安全URL复选框变化"""
+        self.safe_url_input.setEnabled(state == Qt.CheckState.Checked.value)
+    
     def _on_dbms_check_changed(self, state):
         """数据库类型复选框变化"""
         enabled = state == Qt.CheckState.Checked.value
@@ -593,6 +639,18 @@ class AdvancedPanel(QWidget):
     def get_proxy(self) -> str:
         if self.proxy_check.isChecked():
             return self.proxy_input.text().strip()
+        return ""
+    
+    def get_proxy_file(self) -> str:
+        """获取代理池文件路径"""
+        if self.proxy_file_check.isChecked():
+            return self.proxy_file_input.text().strip()
+        return ""
+    
+    def get_safe_url(self) -> str:
+        """获取安全URL"""
+        if self.safe_url_check.isChecked():
+            return self.safe_url_input.text().strip()
         return ""
     
     def use_random_agent(self) -> bool:

@@ -70,6 +70,7 @@ class CommandBuilder:
         # 绕过
         self._tamper = ""
         self._proxy = ""
+        self._proxy_file = ""  # 代理池文件
         self._tor = False
         self._tor_type = ""
         self._skip_waf = False
@@ -77,6 +78,7 @@ class CommandBuilder:
         self._csrf_url = ""
         self._prefix = ""
         self._suffix = ""
+        self._safe_url = ""  # 安全URL
         
         # 信息查询
         self._current_db = False
@@ -304,6 +306,16 @@ class CommandBuilder:
         self._chunked = enabled
         return self
     
+    def set_null_connection(self, enabled: bool = True) -> 'CommandBuilder':
+        """空连接检测"""
+        self._null_connection = enabled
+        return self
+    
+    def set_no_cast(self, enabled: bool = True) -> 'CommandBuilder':
+        """禁用数据类型转换"""
+        self._no_cast = enabled
+        return self
+    
     # ==================== 绕过设置 ====================
     
     def set_tamper(self, tamper: str) -> 'CommandBuilder':
@@ -314,6 +326,16 @@ class CommandBuilder:
     def set_proxy(self, proxy: str) -> 'CommandBuilder':
         """设置代理"""
         self._proxy = proxy
+        return self
+    
+    def set_proxy_file(self, file_path: str) -> 'CommandBuilder':
+        """设置代理池文件"""
+        self._proxy_file = file_path.strip()
+        return self
+    
+    def set_safe_url(self, url: str) -> 'CommandBuilder':
+        """设置安全URL"""
+        self._safe_url = url.strip()
         return self
     
     def set_tor(self, enabled: bool = True, tor_type: str = "") -> 'CommandBuilder':
@@ -665,12 +687,20 @@ class CommandBuilder:
             parts.append('--hpp')
         if self._chunked:
             parts.append('--chunked')
+        if self._null_connection:
+            parts.append('--null-connection')
+        if self._no_cast:
+            parts.append('--no-cast')
         
         # 绕过选项
         if self._tamper:
             parts.append(f'--tamper="{self._tamper}"')
         if self._proxy:
             parts.append(f'--proxy="{self._proxy}"')
+        if self._proxy_file:
+            parts.append(f'--proxy-file="{self._proxy_file}"')
+        if self._safe_url:
+            parts.append(f'--safe-url="{self._safe_url}"')
         if self._tor:
             parts.append('--tor')
             if self._tor_type:

@@ -66,6 +66,11 @@ class MainWindow(QMainWindow):
         
         # 加载保存的配置
         self.load_config()
+        
+        # 启动命令预览定时器（每秒更新一次）
+        self.preview_timer = QTimer(self)
+        self.preview_timer.timeout.connect(self._update_command_preview)
+        self.preview_timer.start(1000)  # 1秒更新一次
     
     def _load_and_apply_theme(self):
         """加载并应用保存的主题"""
@@ -198,6 +203,11 @@ class MainWindow(QMainWindow):
         
         layout.addWidget(tabs)
         
+        # 连接信号以实时更新命令预览
+        self.target_panel.target_changed.connect(self._update_command_preview)
+        self.target_panel.url_input.textChanged.connect(self._update_command_preview)
+        self.scan_panel.mode_changed.connect(lambda _: self._update_command_preview())
+        
         return panel
     
     def _create_right_panel(self) -> QWidget:
@@ -235,7 +245,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(15, 8, 15, 8)
         layout.setSpacing(12)
         
-        # 命令预览
+        # 命令预览区域
+        preview_layout = QHBoxLayout()
+        preview_layout.setSpacing(6)
+        
         self.command_preview = QLabel("命令预览: 请配置扫描参数...")
         self.command_preview.setObjectName("commandPreview")
         self.command_preview.setStyleSheet("""
@@ -244,7 +257,19 @@ class MainWindow(QMainWindow):
         """)
         self.command_preview.setWordWrap(True)
         self.command_preview.setMaximumHeight(40)
-        layout.addWidget(self.command_preview, 1)
+        preview_layout.addWidget(self.command_preview, 1)
+        
+        # 展开详细按钮
+        self.expand_cmd_btn = QPushButton("🔍")
+        self.expand_cmd_btn.setToolTip("查看完整命令")
+        self.expand_cmd_btn.setFixedSize(30, 30)
+        self.expand_cmd_btn.clicked.connect(self._show_full_command)
+        preview_layout.addWidget(self.expand_cmd_btn)
+        
+        layout.addLayout(preview_layout, 1)
+        
+        # 用于存储完整命令
+        self._full_command = ""
         
         # 进度条
         self.progress_bar = QProgressBar()
@@ -462,6 +487,21 @@ class MainWindow(QMainWindow):
         builder.dump_data(self.scan_panel.get_dump())
         builder.dump_all(self.scan_panel.get_dump_all())
         
+        # 搜索功能
+        search_enabled, search_type, search_keyword = self.scan_panel.get_search()
+        if search_enabled and search_keyword:
+            if search_type == 0:  # 列名
+                builder.search_columns(search_keyword)
+            elif search_type == 1:  # 表名
+                builder.search_tables(search_keyword)
+            elif search_type == 2:  # 数据库名
+                builder.search_dbs(search_keyword)
+        
+        # 限制行数
+        limit_enabled, limit_start, limit_stop = self.scan_panel.get_limit()
+        if limit_enabled:
+            builder.set_limit(limit_start, limit_stop)
+        
         # 高级选项 - 性能
         builder.set_threads(self.advanced_panel.get_threads())
         builder.set_timeout(self.advanced_panel.get_timeout())
@@ -484,6 +524,14 @@ class MainWindow(QMainWindow):
         if self.advanced_panel.is_text_only():
             builder.set_text_only(True)
         
+        # 空连接检测
+        if self.advanced_panel.is_null_connection():
+            builder.set_null_connection(True)
+        
+        # 禁用转换
+        if self.advanced_panel.is_no_cast():
+            builder.set_no_cast(True)
+        
         # 绕过设置
         tamper = self.advanced_panel.get_tamper()
         if tamper:
@@ -493,7 +541,19 @@ class MainWindow(QMainWindow):
         if proxy:
             builder.set_proxy(proxy)
         
-        if self.advanced_panel.use_random_agent():
+        # 代理池文件
+        proxy_file = self.advanced_panel.get_proxy_file()
+        if proxy_file:
+            builder.set_proxy_file(proxy_file)
+        
+        # 安全URL
+        safe_url = self.advanced_panel.get_safe_url()
+        if safe_url:
+            builder.set_safe_url(safe_url)
+        
+        # User-Agent 设置：检查目标面板和高级面板的设置
+        # 任意一个勾选随机 User-Agent 都会生效
+        if self.target_panel.use_random_agent() or self.advanced_panel.use_random_agent():
             builder.set_random_agent(True)
         
         if self.advanced_panel.use_tor():
@@ -559,19 +619,80 @@ class MainWindow(QMainWindow):
         try:
             command = self._build_command()
             if command:
-                # 截断过长的命令
-                if len(command) > 200:
-                    display = command[:200] + "..."
+                # 保存完整命令
+                self._full_command = command
+                
+                # 简化显示：只显示 sqlmap.py 后的参数
+                if 'sqlmap.py' in command:
+                    # 找到 sqlmap.py 后的部分
+                    idx = command.find('sqlmap.py"')
+                    if idx != -1:
+                        display = 'sqlmap.py ' + command[idx + 11:]
+                    else:
+                        idx = command.find('sqlmap.py')
+                        display = 'sqlmap.py ' + command[idx + 10:]
                 else:
                     display = command
+                
+                # 截断过长的命令
+                if len(display) > 120:
+                    display = display[:120] + "...  [点击🔍查看完整]"
+                
                 self.command_preview.setText(f"命令: {display}")
                 self.command_preview.setStyleSheet(f"color: {COLORS['text_secondary']};")
             else:
+                self._full_command = ""
                 self.command_preview.setText("命令预览: 请输入目标 URL...")
                 self.command_preview.setStyleSheet(f"color: {COLORS['text_muted']};")
         except Exception as e:
+            self._full_command = ""
             self.command_preview.setText(f"命令错误: {str(e)}")
             self.command_preview.setStyleSheet(f"color: {COLORS['error']};")
+    
+    def _show_full_command(self):
+        """显示完整命令对话框"""
+        if not self._full_command:
+            QMessageBox.information(self, "命令预览", "请先配置扫描参数")
+            return
+        
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QTextEdit, QPushButton, QHBoxLayout, QApplication
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("完整命令")
+        dialog.setMinimumSize(700, 200)
+        
+        layout = QVBoxLayout(dialog)
+        
+        text_edit = QTextEdit()
+        text_edit.setPlainText(self._full_command)
+        text_edit.setReadOnly(True)
+        text_edit.setStyleSheet("""
+            QTextEdit {
+                font-family: 'Consolas', monospace;
+                font-size: 12px;
+            }
+        """)
+        layout.addWidget(text_edit)
+        
+        # 复制和关闭按钮
+        button_layout = QHBoxLayout()
+        
+        copy_btn = QPushButton("📋 复制命令")
+        def copy_cmd():
+            QApplication.clipboard().setText(self._full_command)
+            QMessageBox.information(dialog, "提示", "命令已复制到剪贴板")
+        copy_btn.clicked.connect(copy_cmd)
+        button_layout.addWidget(copy_btn)
+        
+        button_layout.addStretch()
+        
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.exec()
     
     def _update_elapsed_time(self):
         """更新耗时"""

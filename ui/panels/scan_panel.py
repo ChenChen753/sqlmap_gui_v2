@@ -439,6 +439,22 @@ class ScanPanel(QWidget):
     def get_dump_all(self) -> bool:
         return self.dump_all_check.isChecked()
     
+    def get_search(self) -> tuple:
+        """获取搜索配置 (是否搜索, 类型, 关键词)
+        类型: 0=列名(-C), 1=表名(-T), 2=数据库名(-D)
+        """
+        if self.search_check.isChecked():
+            keyword = self.search_input.text().strip()
+            search_type = self.search_type_combo.currentIndex()
+            return True, search_type, keyword
+        return False, 0, ""
+    
+    def get_limit(self) -> tuple:
+        """获取限制行数配置 (是否限制, 起始, 结束)"""
+        if self.limit_check.isChecked():
+            return True, self.limit_start_spin.value(), self.limit_stop_spin.value()
+        return False, 0, 0
+    
     def get_current_mode(self) -> str:
         """获取当前模式"""
         for btn in self.mode_group.buttons():
