@@ -57,6 +57,7 @@ class CommandBuilder:
         self._flush_session = False
         self._fresh_queries = False
         self._random_agent = False
+        self._user_agent = ""  # 具体的 User-Agent 字符串
         self._mobile = False
         self._verbose = 1
         self._forms = False
@@ -274,6 +275,11 @@ class CommandBuilder:
     def set_mobile(self, enabled: bool = True) -> 'CommandBuilder':
         """设置移动端 User-Agent"""
         self._mobile = enabled
+        return self
+    
+    def set_user_agent(self, ua: str) -> 'CommandBuilder':
+        """设置具体的 User-Agent 字符串"""
+        self._user_agent = ua.strip()
         return self
     
     def set_verbose(self, level: int) -> 'CommandBuilder':
@@ -671,6 +677,8 @@ class CommandBuilder:
             parts.append('--fresh-queries')
         if self._random_agent:
             parts.append('--random-agent')
+        if self._user_agent:
+            parts.append(f'--user-agent="{self._user_agent}"')
         if self._mobile:
             parts.append('--mobile')
         if self._verbose != 1:

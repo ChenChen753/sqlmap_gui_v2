@@ -552,8 +552,12 @@ class MainWindow(QMainWindow):
             builder.set_safe_url(safe_url)
         
         # User-Agent 设置：检查目标面板和高级面板的设置
-        # 任意一个勾选随机 User-Agent 都会生效
-        if self.target_panel.use_random_agent() or self.advanced_panel.use_random_agent():
+        # 优先检查具体 UA（Chrome/Firefox 等）
+        user_agent = self.target_panel.get_user_agent()
+        if user_agent:
+            builder.set_user_agent(user_agent)
+        # 否则检查随机 UA
+        elif self.target_panel.use_random_agent() or self.advanced_panel.use_random_agent():
             builder.set_random_agent(True)
         
         if self.advanced_panel.use_tor():

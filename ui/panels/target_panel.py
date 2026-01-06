@@ -324,6 +324,29 @@ class TargetPanel(QWidget):
         """是否使用随机 User-Agent"""
         return self.ua_check.isChecked() and self.ua_combo.currentIndex() == 0
     
+    def get_user_agent(self) -> str:
+        """获取具体的 User-Agent 字符串
+        返回空字符串表示不使用具体UA，使用随机UA或不设置
+        """
+        if not self.ua_check.isChecked():
+            return ""
+        
+        index = self.ua_combo.currentIndex()
+        # 预定义的 User-Agent 字符串
+        user_agents = {
+            1: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",  # Chrome
+            2: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",  # Firefox
+            3: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0",  # Edge
+            4: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",  # Safari
+        }
+        
+        if index in user_agents:
+            return user_agents[index]
+        elif index == 5:  # 自定义 - 暂时返回空，后续可添加自定义输入
+            return ""
+        
+        return ""
+    
     def set_target(self, url: str):
         """设置目标 URL"""
         self.url_input.setText(url)
