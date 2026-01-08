@@ -445,10 +445,24 @@ class AIPanel(QWidget):
             if tamper_value.lower() not in ['none', '无', 'no', 'null', 'xxx', '脚本名']:
                 params['tamper'] = tamper_value
         
-        # 解析 --technique 参数
+        # 解析 --technique 参数（支持多种格式）
+        # 格式1: --technique=BEUT
         technique_match = re.search(r'--technique[=\s]+["\']?([BEUSTQ]+)["\']?', cmd, re.IGNORECASE)
         if technique_match:
             params['technique'] = technique_match.group(1).upper()
+        else:
+            # 格式2: 表格中的 | --technique | BEUT | 或 | technique | BEUT |
+            technique_table_match = re.search(r'\|\s*-*technique\s*\|\s*([BEUSTQ]+)\s*\|', cmd, re.IGNORECASE)
+            if technique_table_match:
+                params['technique'] = technique_table_match.group(1).upper()
+            else:
+                # 格式3: 建议尝试 technique=B 或类似描述
+                technique_suggest_match = re.search(r'technique[=:]\s*([BEUSTQ]+)', cmd, re.IGNORECASE)
+                if technique_suggest_match:
+                    technique_val = technique_suggest_match.group(1).upper()
+                    # 如果当前解析的内容包含这个技术建议，添加到已有技术
+                    if 'technique' not in params:
+                        params['technique'] = technique_val
         
         # 解析 --level 参数
         level_match = re.search(r'--level[=\s]+(\d+)', cmd)
