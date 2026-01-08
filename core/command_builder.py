@@ -326,7 +326,11 @@ class CommandBuilder:
     
     def set_tamper(self, tamper: str) -> 'CommandBuilder':
         """设置 tamper 脚本"""
-        self._tamper = tamper
+        # 过滤无效的 tamper 值
+        if tamper and tamper.lower() not in ['none', '无', 'no', 'null', '']:
+            self._tamper = tamper
+        else:
+            self._tamper = ""
         return self
     
     def set_proxy(self, proxy: str) -> 'CommandBuilder':

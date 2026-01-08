@@ -440,7 +440,10 @@ class AIPanel(QWidget):
         # 解析 --tamper 参数
         tamper_match = re.search(r'--tamper[=\s]+["\']?([^"\'\s]+(?:,[^"\'\s]+)*)["\']?', cmd)
         if tamper_match:
-            params['tamper'] = tamper_match.group(1)
+            tamper_value = tamper_match.group(1)
+            # 过滤无效的 tamper 值
+            if tamper_value.lower() not in ['none', '无', 'no', 'null', 'xxx', '脚本名']:
+                params['tamper'] = tamper_value
         
         # 解析 --technique 参数
         technique_match = re.search(r'--technique[=\s]+["\']?([BEUSTQ]+)["\']?', cmd, re.IGNORECASE)
