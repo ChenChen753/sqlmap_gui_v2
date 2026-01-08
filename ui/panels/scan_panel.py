@@ -528,3 +528,19 @@ class ScanPanel(QWidget):
     def set_dump_all(self, checked: bool):
         """设置是否提取全部数据"""
         self.dump_all_check.setChecked(checked)
+    
+    def set_level(self, level: int):
+        """设置扫描等级"""
+        if 0 <= level <= 5:
+            self.level_combo.setCurrentIndex(level)
+    
+    def set_risk(self, risk: int):
+        """设置风险等级"""
+        if 0 <= risk <= 3:
+            self.risk_combo.setCurrentIndex(risk)
+    
+    def set_technique(self, technique: str):
+        """设置注入技术"""
+        for code, check in self.tech_checks.items():
+            check.setChecked(code in technique.upper())
+

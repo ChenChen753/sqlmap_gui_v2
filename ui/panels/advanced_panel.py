@@ -769,4 +769,49 @@ class AdvancedPanel(QWidget):
         """设置目标表"""
         self.target_table_check.setChecked(True)
         self.target_table_input.setText(table_name)
-
+    
+    # ==================== AI 参数应用方法 ====================
+    
+    def set_threads(self, threads: int):
+        """设置线程数"""
+        if 1 <= threads <= 10:
+            self.threads_spin.setValue(threads)
+    
+    def set_timeout(self, timeout: int):
+        """设置超时时间"""
+        if 5 <= timeout <= 300:
+            self.timeout_spin.setValue(timeout)
+    
+    def set_tamper(self, tamper: str):
+        """设置 Tamper 脚本"""
+        if tamper:
+            self._selected_tamper_scripts = [t.strip() for t in tamper.split(',') if t.strip()]
+            self._update_tamper_display()
+    
+    def set_proxy(self, proxy: str):
+        """设置代理"""
+        if proxy:
+            self.proxy_check.setChecked(True)
+            self.proxy_input.setText(proxy)
+    
+    def set_random_agent(self, enabled: bool):
+        """设置随机 User-Agent"""
+        self.random_agent_check.setChecked(enabled)
+    
+    def set_prefix(self, prefix: str):
+        """设置注入前缀"""
+        self.prefix_input.setText(prefix)
+    
+    def set_suffix(self, suffix: str):
+        """设置注入后缀"""
+        self.suffix_input.setText(suffix)
+    
+    def set_dbms(self, dbms: str):
+        """设置数据库类型"""
+        if dbms:
+            self.dbms_check.setChecked(True)
+            # 查找匹配的数据库名称
+            for i in range(self.dbms_combo.count()):
+                if dbms.lower() in self.dbms_combo.itemText(i).lower():
+                    self.dbms_combo.setCurrentIndex(i)
+                    break

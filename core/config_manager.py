@@ -38,6 +38,50 @@ class ConfigManager:
             'batch_mode': 'true',
             'fresh_queries': 'true',
             'random_agent': 'false',
+        },
+        'AI': {
+            # 当前选择的 AI 服务
+            'provider': 'ollama',
+            
+            # Ollama 本地模型
+            'ollama_url': 'http://localhost:11434',
+            'ollama_model': 'qwen2:7b',
+            
+            # OpenAI
+            'openai_api_key': '',
+            'openai_base_url': 'https://api.openai.com/v1',
+            'openai_model': 'gpt-4o-mini',
+            
+            # Claude
+            'claude_api_key': '',
+            'claude_base_url': 'https://api.anthropic.com',
+            'claude_model': 'claude-3-haiku-20240307',
+            
+            # DeepSeek（国内推荐）
+            'deepseek_api_key': '',
+            'deepseek_model': 'deepseek-chat',
+            
+            # 阿里通义千问
+            'qwen_api_key': '',
+            'qwen_model': 'qwen-turbo',
+            
+            # 智谱 GLM
+            'zhipu_api_key': '',
+            'zhipu_model': 'glm-4-flash',
+            
+            # 月之暗面 Kimi
+            'moonshot_api_key': '',
+            'moonshot_model': 'moonshot-v1-8k',
+            
+            # 自定义 API
+            'custom_api_key': '',
+            'custom_base_url': '',
+            'custom_model': '',
+            
+            # 通用参数
+            'max_tokens': '2000',
+            'temperature': '0.7',
+            'timeout': '60',
         }
     }
     

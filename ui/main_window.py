@@ -24,6 +24,7 @@ from .panels.scan_panel import ScanPanel
 from .panels.advanced_panel import AdvancedPanel
 from .panels.result_panel import ResultPanel
 from .panels.log_panel import LogPanel
+from .panels.ai_panel import AIPanel
 
 # 添加父目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -231,6 +232,13 @@ class MainWindow(QMainWindow):
         self.result_panel.dump_requested.connect(self._on_dump_requested)
         tabs.addTab(self.result_panel, "📊 结果")
         
+        # AI 分析面板
+        self.ai_panel = AIPanel(self.config)
+        self.ai_panel.set_log_getter(lambda: self.log_panel.get_log())
+        self.ai_panel.set_command_getter(lambda: self._full_command if hasattr(self, '_full_command') else '')
+        self.ai_panel.apply_params_requested.connect(self._apply_ai_params)
+        tabs.addTab(self.ai_panel, "🤖 AI分析")
+        
         layout.addWidget(tabs)
         
         return panel
@@ -331,6 +339,18 @@ class MainWindow(QMainWindow):
         clear_history_action = QAction("清除历史", self)
         clear_history_action.triggered.connect(self.clear_history)
         tool_menu.addAction(clear_history_action)
+        
+        tool_menu.addSeparator()
+        
+        # AI 分析菜单项
+        ai_analyze_action = QAction("🤖 AI 分析日志", self)
+        ai_analyze_action.setShortcut("Ctrl+Shift+A")
+        ai_analyze_action.triggered.connect(self._show_ai_analyze)
+        tool_menu.addAction(ai_analyze_action)
+        
+        ai_settings_action = QAction("⚙️ AI 设置", self)
+        ai_settings_action.triggered.connect(self._show_ai_settings)
+        tool_menu.addAction(ai_settings_action)
         
         tool_menu.addSeparator()
         
@@ -999,10 +1019,106 @@ class MainWindow(QMainWindow):
         # 可选：自动点击开始
         # self.start_scan()
     
+    def _show_ai_analyze(self):
+        """显示 AI 分析（切换到 AI 分析标签页）"""
+        # 找到右侧面板的标签页并切换到 AI 分析
+        if hasattr(self, 'ai_panel'):
+            # 获取 AI 面板所在的 TabWidget
+            parent = self.ai_panel.parent()
+            while parent and not isinstance(parent, QTabWidget):
+                parent = parent.parent()
+            if parent:
+                index = parent.indexOf(self.ai_panel)
+                if index >= 0:
+                    parent.setCurrentIndex(index)
+    
+    def _show_ai_settings(self):
+        """显示 AI 设置对话框"""
+        from .dialogs.ai_settings_dialog import AISettingsDialog
+        dialog = AISettingsDialog(self.config, self)
+        dialog.exec()
+    
     def show_about(self):
         """显示关于"""
         dialog = AboutDialog(self)
         dialog.exec()
+    
+    def _apply_ai_params(self, params: dict):
+        """
+        应用 AI 推荐的参数
+        
+        参数:
+            params: 推荐参数字典，可能包含：
+                - tamper: Tamper 脚本
+                - technique: 注入技术
+                - level: 扫描等级
+                - risk: 风险等级
+                - threads: 线程数
+                - random_agent: 是否随机 UA
+                - proxy: 代理
+                - prefix: 注入前缀
+                - suffix: 注入后缀
+                - dbms: 数据库类型
+                - time_sec: 延迟时间
+        """
+        applied_count = 0
+        
+        try:
+            # 应用扫描面板参数
+            if 'level' in params:
+                self.scan_panel.set_level(params['level'])
+                applied_count += 1
+            
+            if 'risk' in params:
+                self.scan_panel.set_risk(params['risk'])
+                applied_count += 1
+            
+            if 'technique' in params:
+                self.scan_panel.set_technique(params['technique'])
+                applied_count += 1
+            
+            # 应用高级面板参数
+            if 'threads' in params:
+                self.advanced_panel.set_threads(params['threads'])
+                applied_count += 1
+            
+            if 'tamper' in params:
+                self.advanced_panel.set_tamper(params['tamper'])
+                applied_count += 1
+            
+            if 'proxy' in params:
+                self.advanced_panel.set_proxy(params['proxy'])
+                applied_count += 1
+            
+            if 'random_agent' in params and params['random_agent']:
+                self.advanced_panel.set_random_agent(True)
+                applied_count += 1
+            
+            if 'prefix' in params:
+                self.advanced_panel.set_prefix(params['prefix'])
+                applied_count += 1
+            
+            if 'suffix' in params:
+                self.advanced_panel.set_suffix(params['suffix'])
+                applied_count += 1
+            
+            if 'dbms' in params:
+                self.advanced_panel.set_dbms(params['dbms'])
+                applied_count += 1
+            
+            if 'time_sec' in params:
+                self.advanced_panel.set_timeout(params['time_sec'])
+                applied_count += 1
+            
+            # 更新命令预览
+            self._update_command_preview()
+            
+            # 更新状态
+            self.status_label.setText(f"已应用 {applied_count} 个 AI 推荐参数")
+            
+        except Exception as e:
+            QMessageBox.warning(self, "应用失败", f"应用部分参数时出错: {str(e)}")
+    
     
     # ==================== 事件处理 ====================
     
