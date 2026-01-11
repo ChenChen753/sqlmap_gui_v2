@@ -76,6 +76,16 @@ class MainWindow(QMainWindow):
         
         # 启动时自动检查更新（延迟3秒，避免阻塞启动）
         QTimer.singleShot(3000, self._auto_check_update)
+        
+        # 检查版本变更，如果是新版本则重置自动更新设置
+        current_version = QApplication.applicationVersion()
+        last_run_version = self.config.get("General", "last_run_version", "")
+        
+        if current_version != last_run_version:
+            # 版本已变更，重置自动更新设置（默认开启）
+            self.config.set("General", "last_run_version", current_version)
+            self.config.set("update", "disable_auto_check", "false")
+            self.config.save()
     
     def _load_and_apply_theme(self):
         """加载并应用保存的主题"""
