@@ -73,6 +73,9 @@ class MainWindow(QMainWindow):
         self.preview_timer = QTimer(self)
         self.preview_timer.timeout.connect(self._update_command_preview)
         self.preview_timer.start(1000)  # 1秒更新一次
+        
+        # 启动时自动检查更新（延迟3秒，避免阻塞启动）
+        QTimer.singleShot(3000, self._auto_check_update)
     
     def _load_and_apply_theme(self):
         """加载并应用保存的主题"""
@@ -1055,6 +1058,35 @@ class MainWindow(QMainWindow):
         """显示关于"""
         dialog = AboutDialog(self)
         dialog.exec()
+    
+    def _auto_check_update(self):
+        """启动时自动检查更新（静默检查，只有有更新才提示）"""
+        from .dialogs.update_dialog import UpdateDialog
+        
+        try:
+            updater = Updater()
+            has_update, version_info, error = updater.check_gui_update()
+            
+            # 只有在有更新时才提示，其他情况静默处理
+            if has_update and version_info:
+                # 弹出更新提示
+                reply = QMessageBox.question(
+                    self,
+                    "发现新版本",
+                    f"发现新版本 {version_info.version}！\n\n"
+                    f"当前版本: {updater.get_current_version()}\n"
+                    f"最新版本: {version_info.version}\n\n"
+                    "是否立即更新？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    dialog = UpdateDialog(version_info, self)
+                    dialog.exec()
+        except Exception:
+            # 自动检查失败时静默处理，不打扰用户
+            pass
     
     def _check_update(self):
         """检查 GUI 更新"""
