@@ -177,7 +177,7 @@ class UpdateDialog(QDialog):
                 font-weight: bold;
             }}
             QPushButton:hover {{
-                background-color: {COLORS['accent_blue_hover']};
+                background-color: #89b4fa;
             }}
         """)
         btn_layout.addWidget(self.update_btn)
@@ -189,31 +189,43 @@ class UpdateDialog(QDialog):
         self.update_btn.setEnabled(False)
         self.later_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("正在下载更新...")
+        # 先设置为动画模式，让用户知道正在下载
+        self.progress_bar.setMaximum(0)
+        self.status_label.setText("正在连接服务器...")
+        QApplication.processEvents()  # 强制刷新界面
         
         # 启动下载线程
         self.download_thread = DownloadThread(
             self.updater, 'gui', self.version_info
         )
-        self.download_thread.progress.connect(self._on_progress)
-        self.download_thread.finished.connect(self._on_finished)
+        self.download_thread.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
+        self.download_thread.finished.connect(self._on_finished, Qt.ConnectionType.QueuedConnection)
         self.download_thread.start()
     
     def _on_progress(self, downloaded: int, total: int):
         """更新进度"""
         if total > 0:
+            # 有总大小时显示百分比
             percent = int(downloaded * 100 / total)
+            self.progress_bar.setMaximum(100)
             self.progress_bar.setValue(percent)
             
             # 显示大小
             downloaded_mb = downloaded / (1024 * 1024)
             total_mb = total / (1024 * 1024)
             self.status_label.setText(f"正在下载: {downloaded_mb:.1f} MB / {total_mb:.1f} MB")
+        else:
+            # 无法获取总大小时使用无限进度条动画
+            self.progress_bar.setMaximum(0)  # 设置为无限模式
+            downloaded_mb = downloaded / (1024 * 1024)
+            self.status_label.setText(f"正在下载: {downloaded_mb:.1f} MB ...")
+        
+        QApplication.processEvents()  # 强制刷新界面
     
     def _on_finished(self, success: bool, error: str):
         """下载完成"""
         if success:
+            self.progress_bar.setMaximum(100)
             self.progress_bar.setValue(100)
             self.status_label.setText("更新完成！")
             self.status_label.setStyleSheet(f"color: {COLORS['success']};")
@@ -225,6 +237,7 @@ class UpdateDialog(QDialog):
             )
             self.accept()
         else:
+            self.progress_bar.setMaximum(100)  # 恢复正常模式
             self.status_label.setText(f"更新失败: {error}")
             self.status_label.setStyleSheet(f"color: {COLORS['error']};")
             self.update_btn.setEnabled(True)
@@ -337,28 +350,40 @@ class DownloadSqlmapDialog(QDialog):
         self.download_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("正在下载 SQLMap...")
+        # 先设置为动画模式
+        self.progress_bar.setMaximum(0)
+        self.status_label.setText("正在连接服务器...")
+        QApplication.processEvents()  # 强制刷新界面
         
         # 启动下载线程
         self.download_thread = DownloadThread(self.updater, 'sqlmap')
-        self.download_thread.progress.connect(self._on_progress)
-        self.download_thread.finished.connect(self._on_finished)
+        self.download_thread.progress.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
+        self.download_thread.finished.connect(self._on_finished, Qt.ConnectionType.QueuedConnection)
         self.download_thread.start()
     
     def _on_progress(self, downloaded: int, total: int):
         """更新进度"""
         if total > 0:
+            # 有总大小时显示百分比
             percent = int(downloaded * 100 / total)
+            self.progress_bar.setMaximum(100)
             self.progress_bar.setValue(percent)
             
             downloaded_mb = downloaded / (1024 * 1024)
             total_mb = total / (1024 * 1024)
             self.status_label.setText(f"正在下载: {downloaded_mb:.1f} MB / {total_mb:.1f} MB")
+        else:
+            # 无法获取总大小时使用无限进度条动画
+            self.progress_bar.setMaximum(0)  # 设置为无限模式
+            downloaded_mb = downloaded / (1024 * 1024)
+            self.status_label.setText(f"正在下载: {downloaded_mb:.1f} MB ...")
+        
+        QApplication.processEvents()  # 强制刷新界面
     
     def _on_finished(self, success: bool, error: str):
         """下载完成"""
         if success:
+            self.progress_bar.setMaximum(100)
             self.progress_bar.setValue(100)
             self.status_label.setText("下载完成！")
             self.status_label.setStyleSheet(f"color: {COLORS['success']};")
@@ -373,6 +398,7 @@ class DownloadSqlmapDialog(QDialog):
             )
             self.accept()
         else:
+            self.progress_bar.setMaximum(100) # 恢复正常模式
             self.status_label.setText(f"下载失败: {error}")
             self.status_label.setStyleSheet(f"color: {COLORS['error']};")
             self.download_btn.setEnabled(True)

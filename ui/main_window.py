@@ -375,6 +375,15 @@ class MainWindow(QMainWindow):
         download_sqlmap_action.triggered.connect(self._download_sqlmap)
         help_menu.addAction(download_sqlmap_action)
         
+        # 自动更新提示开关
+        self.auto_update_action = QAction("🔔 启用自动更新提示", self)
+        self.auto_update_action.setCheckable(True)
+        # 如果当前是禁用状态，显示为未勾选
+        is_enabled = self.config.get("update", "disable_auto_check", "false") != "true"
+        self.auto_update_action.setChecked(is_enabled)
+        self.auto_update_action.triggered.connect(self._toggle_auto_update)
+        help_menu.addAction(self.auto_update_action)
+        
         help_menu.addSeparator()
         
         about_action = QAction("关于", self)
@@ -1061,6 +1070,10 @@ class MainWindow(QMainWindow):
     
     def _auto_check_update(self):
         """启动时自动检查更新（静默检查，只有有更新才提示）"""
+        # 检查用户是否禁用了自动更新提示
+        if self.config.get("update", "disable_auto_check", "false") == "true":
+            return
+
         from .dialogs.update_dialog import UpdateDialog
         
         try:
@@ -1069,21 +1082,41 @@ class MainWindow(QMainWindow):
             
             # 只有在有更新时才提示，其他情况静默处理
             if has_update and version_info:
-                # 弹出更新提示
-                reply = QMessageBox.question(
-                    self,
-                    "发现新版本",
+                # 创建自定义消息框，添加"不再提示"按钮
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("发现新版本")
+                msg_box.setText(
                     f"发现新版本 {version_info.version}！\n\n"
                     f"当前版本: {updater.get_current_version()}\n"
-                    f"最新版本: {version_info.version}\n\n"
-                    "是否立即更新？",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
+                    f"最新版本: {version_info.version}"
                 )
+                msg_box.setInformativeText("是否立即更新？")
+                msg_box.setIcon(QMessageBox.Icon.Information)
                 
-                if reply == QMessageBox.StandardButton.Yes:
-                    dialog = UpdateDialog(version_info, self)
-                    dialog.exec()
+                # 添加按钮
+                update_btn = msg_box.addButton("立即更新", QMessageBox.ButtonRole.AcceptRole)
+                later_btn = msg_box.addButton("稍后提醒", QMessageBox.ButtonRole.RejectRole)
+                never_btn = msg_box.addButton("不再提示", QMessageBox.ButtonRole.DestructiveRole)
+                
+                msg_box.exec()
+                clicked_btn = msg_box.clickedButton()
+                
+                if clicked_btn == update_btn:
+                    try:
+                        dialog = UpdateDialog(version_info, self)
+                        dialog.exec()
+                    except Exception as e:
+                        QMessageBox.warning(self, "更新失败", f"打开更新对话框失败:\n{str(e)}")
+                elif clicked_btn == never_btn:
+                    # 保存用户选择，不再自动提示
+                    self.config.set("update", "disable_auto_check", "true")
+                    # 同步更新菜单勾选状态
+                    self.auto_update_action.setChecked(False)
+                    QMessageBox.information(
+                        self,
+                        "已禁用自动更新提示",
+                        "已禁用自动更新提示。\n\n您仍可以通过「帮助 → 检查更新」手动检查更新。"
+                    )
         except Exception:
             # 自动检查失败时静默处理，不打扰用户
             pass
@@ -1129,6 +1162,25 @@ class MainWindow(QMainWindow):
         dialog = DownloadSqlmapDialog(self)
         dialog.download_completed.connect(self._find_sqlmap)  # 下载完成后刷新路径
         dialog.exec()
+    
+    def _toggle_auto_update(self, checked: bool):
+        """切换自动更新提示"""
+        if checked:
+            # 启用自动更新提示
+            self.config.set("update", "disable_auto_check", "false")
+            QMessageBox.information(
+                self,
+                "已启用",
+                "已启用启动时自动更新提示。\n\n下次启动程序时将自动检查更新。"
+            )
+        else:
+            # 禁用自动更新提示
+            self.config.set("update", "disable_auto_check", "true")
+            QMessageBox.information(
+                self,
+                "已禁用",
+                "已禁用启动时自动更新提示。\n\n您仍可以通过「帮助 → 检查更新」手动检查。"
+            )
     
     def _apply_ai_params(self, params: dict):
         """
