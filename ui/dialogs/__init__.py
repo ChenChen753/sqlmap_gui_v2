@@ -7,6 +7,15 @@ from .about_dialog import AboutDialog
 from .history_dialog import HistoryDialog
 from .tamper_dialog import TamperSelectionDialog
 from .ai_settings_dialog import AISettingsDialog
+from .update_dialog import UpdateDialog, DownloadSqlmapDialog
 
-__all__ = ['SettingsDialog', 'AboutDialog', 'HistoryDialog', 'TamperSelectionDialog', 'AISettingsDialog']
+__all__ = [
+    'SettingsDialog', 
+    'AboutDialog', 
+    'HistoryDialog', 
+    'TamperSelectionDialog', 
+    'AISettingsDialog',
+    'UpdateDialog',
+    'DownloadSqlmapDialog'
+]
 

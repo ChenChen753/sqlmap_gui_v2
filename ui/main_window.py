@@ -32,6 +32,7 @@ from core.sqlmap_engine import SqlmapEngine, SqlmapFinder
 from core.command_builder import CommandBuilder
 from core.config_manager import ConfigManager
 from core.history_manager import HistoryManager
+from core.updater import Updater
 
 
 class MainWindow(QMainWindow):
@@ -360,6 +361,18 @@ class MainWindow(QMainWindow):
         
         # 帮助菜单
         help_menu = menubar.addMenu("帮助")
+        
+        # 检查更新
+        check_update_action = QAction("🔄 检查更新", self)
+        check_update_action.triggered.connect(self._check_update)
+        help_menu.addAction(check_update_action)
+        
+        # 下载 SQLMap
+        download_sqlmap_action = QAction("📥 下载/更新 SQLMap", self)
+        download_sqlmap_action.triggered.connect(self._download_sqlmap)
+        help_menu.addAction(download_sqlmap_action)
+        
+        help_menu.addSeparator()
         
         about_action = QAction("关于", self)
         about_action.triggered.connect(self.show_about)
@@ -1041,6 +1054,48 @@ class MainWindow(QMainWindow):
     def show_about(self):
         """显示关于"""
         dialog = AboutDialog(self)
+        dialog.exec()
+    
+    def _check_update(self):
+        """检查 GUI 更新"""
+        from .dialogs.update_dialog import UpdateDialog
+        
+        self.status_label.setText("正在检查更新...")
+        QApplication.processEvents()
+        
+        updater = Updater()
+        has_update, version_info, error = updater.check_gui_update()
+        
+        if error:
+            self.status_label.setText("就绪")
+            if error == "暂无发布版本":
+                QMessageBox.information(
+                    self,
+                    "检查更新",
+                    "当前仓库暂无发布版本。\n\n请在 GitHub 仓库的 Releases 页面发布版本后再试。"
+                )
+            else:
+                QMessageBox.warning(self, "检查更新失败", error)
+            return
+        
+        if has_update:
+            self.status_label.setText("就绪")
+            dialog = UpdateDialog(version_info, self)
+            dialog.exec()
+        else:
+            self.status_label.setText("就绪")
+            QMessageBox.information(
+                self,
+                "检查更新",
+                f"当前已是最新版本！\n\n当前版本: {updater.get_current_version()}"
+            )
+    
+    def _download_sqlmap(self):
+        """下载/更新 SQLMap"""
+        from .dialogs.update_dialog import DownloadSqlmapDialog
+        
+        dialog = DownloadSqlmapDialog(self)
+        dialog.download_completed.connect(self._find_sqlmap)  # 下载完成后刷新路径
         dialog.exec()
     
     def _apply_ai_params(self, params: dict):
