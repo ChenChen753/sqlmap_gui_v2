@@ -88,6 +88,7 @@ class AIPanel(QWidget):
         self._command_getter = None  # 获取当前命令的回调函数
         self._last_analysis_result = ""  # 保存最后一次分析结果
         self._safe_params = {}  # 安全方案参数
+        self._moderate_params = {}  # 进阶方案参数
         self._aggressive_params = {}  # 激进方案参数
         self._current_scheme = 'safe'  # 当前选择的方案
         self.setup_ui()
@@ -157,6 +158,11 @@ class AIPanel(QWidget):
         self.safe_radio.toggled.connect(lambda checked: self._on_scheme_changed('safe') if checked else None)
         self.scheme_btn_group.addButton(self.safe_radio)
         scheme_btn_layout.addWidget(self.safe_radio)
+        
+        self.moderate_radio = QRadioButton("🟡 进阶方案（中等）")
+        self.moderate_radio.toggled.connect(lambda checked: self._on_scheme_changed('moderate') if checked else None)
+        self.scheme_btn_group.addButton(self.moderate_radio)
+        scheme_btn_layout.addWidget(self.moderate_radio)
         
         self.aggressive_radio = QRadioButton("🔴 激进方案（谨慎）")
         self.aggressive_radio.toggled.connect(lambda checked: self._on_scheme_changed('aggressive') if checked else None)
@@ -320,6 +326,7 @@ class AIPanel(QWidget):
         self.result_text.clear()
         self.scheme_group.setVisible(False)
         self._safe_params = {}
+        self._moderate_params = {}
         self._aggressive_params = {}
         self.apply_btn.setEnabled(False)
         
@@ -373,27 +380,36 @@ class AIPanel(QWidget):
             self.status_label.setStyleSheet("color: #f7768e;")
     
     def _parse_schemes(self, content: str):
-        """解析安全方案和激进方案"""
+        """解析安全方案、进阶方案和激进方案"""
         # 解析安全方案 [SAFE]
         safe_match = re.search(r'\[SAFE\]\s*([^\n\[]*(?:\n(?!\[)[^\n]*)*)', content)
         if safe_match:
             safe_cmd = safe_match.group(1).strip()
-            self._safe_params = self._parse_command_params(safe_cmd, is_safe=True)
+            self._safe_params = self._parse_command_params(safe_cmd, scheme_type='safe')
         else:
             # 尝试从「安全方案」表格解析
-            self._safe_params = self._parse_from_content(content, '安全方案', is_safe=True)
+            self._safe_params = self._parse_from_content(content, '安全方案', scheme_type='safe')
+        
+        # 解析进阶方案 [MODERATE]
+        moderate_match = re.search(r'\[MODERATE\]\s*([^\n\[]*(?:\n(?!\[)[^\n]*)*)', content)
+        if moderate_match:
+            moderate_cmd = moderate_match.group(1).strip()
+            self._moderate_params = self._parse_command_params(moderate_cmd, scheme_type='moderate')
+        else:
+            # 尝试从「进阶方案」表格解析
+            self._moderate_params = self._parse_from_content(content, '进阶方案', scheme_type='moderate')
         
         # 解析激进方案 [AGGRESSIVE]
         aggressive_match = re.search(r'\[AGGRESSIVE\]\s*([^\n\[]*(?:\n(?!\[)[^\n]*)*)', content)
         if aggressive_match:
             aggressive_cmd = aggressive_match.group(1).strip()
-            self._aggressive_params = self._parse_command_params(aggressive_cmd, is_safe=False)
+            self._aggressive_params = self._parse_command_params(aggressive_cmd, scheme_type='aggressive')
         else:
             # 尝试从「激进方案」表格解析
-            self._aggressive_params = self._parse_from_content(content, '激进方案', is_safe=False)
+            self._aggressive_params = self._parse_from_content(content, '激进方案', scheme_type='aggressive')
         
         # 显示方案选择区
-        if self._safe_params or self._aggressive_params:
+        if self._safe_params or self._moderate_params or self._aggressive_params:
             self.scheme_group.setVisible(True)
             self.safe_radio.setChecked(True)
             self._current_scheme = 'safe'
@@ -401,7 +417,7 @@ class AIPanel(QWidget):
             self.apply_btn.setEnabled(True)
         else:
             # 如果无法解析方案，尝试旧方式解析
-            params = self._parse_command_params(content, is_safe=True)
+            params = self._parse_command_params(content, scheme_type='safe')
             if params:
                 self._safe_params = params
                 self.scheme_group.setVisible(True)
@@ -409,23 +425,25 @@ class AIPanel(QWidget):
                 self._update_params_display()
                 self.apply_btn.setEnabled(True)
     
-    def _parse_from_content(self, content: str, scheme_name: str, is_safe: bool = False) -> dict:
+    def _parse_from_content(self, content: str, scheme_name: str, scheme_type: str = 'safe') -> dict:
         """从内容中解析特定方案的参数"""
         # 找到方案段落
         pattern = rf'{scheme_name}.*?```\s*(.*?)```'
         match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if match:
-            return self._parse_command_params(match.group(1), is_safe=is_safe)
+            return self._parse_command_params(match.group(1), scheme_type=scheme_type)
         return {}
     
-    def _parse_command_params(self, cmd: str, is_safe: bool = False) -> dict:
+    def _parse_command_params(self, cmd: str, scheme_type: str = 'safe') -> dict:
         """从命令字符串解析参数
         
         参数:
             cmd: 命令字符串
-            is_safe: 是否为安全方案，如果是则过滤危险参数
+            scheme_type: 方案类型 'safe'/'moderate'/'aggressive'
         """
         params = {}
+        is_safe = (scheme_type == 'safe')
+        is_moderate = (scheme_type == 'moderate')
         
         # 安全方案禁止的危险功能
         DANGEROUS_FEATURES = ['os-shell', 'os-pwn', 'file-read', 'file-write', 'dump-all']
@@ -508,8 +526,79 @@ class AIPanel(QWidget):
         if dbms_match:
             params['dbms'] = dbms_match.group(1)
         
+        # ==================== 新增绕过参数解析 ====================
+        
+        # 解析 --delay 延时参数
+        delay_match = re.search(r'--delay[=\s]+(\d+(?:\.\d+)?)', cmd)
+        if delay_match:
+            params['delay'] = float(delay_match.group(1))
+        
+        # 解析 --time-sec 时间盲注等待时间
+        time_sec_match = re.search(r'--time-sec[=\s]+(\d+)', cmd)
+        if time_sec_match:
+            params['time_sec'] = int(time_sec_match.group(1))
+        
+        # 解析 --hpp HTTP参数污染
+        if '--hpp' in cmd:
+            params['hpp'] = True
+        
+        # 解析 --chunked 分块传输
+        if '--chunked' in cmd:
+            params['chunked'] = True
+        
+        # 解析 --hex 十六进制编码
+        if '--hex' in cmd:
+            params['hex'] = True
+        
+        # 解析 --no-escape 关闭转义
+        if '--no-escape' in cmd:
+            params['no_escape'] = True
+        
+        # 解析 --skip-urlencode 跳过URL编码
+        if '--skip-urlencode' in cmd:
+            params['skip_urlencode'] = True
+        
+        # 解析 --mobile 移动端模拟
+        if '--mobile' in cmd:
+            params['mobile'] = True
+        
+        # 解析 --prefix 前缀
+        prefix_match = re.search(r'--prefix[=\s]+["\']?([^"\'\n]+)["\']?', cmd)
+        if prefix_match:
+            params['prefix'] = prefix_match.group(1).strip()
+        
+        # 解析 --suffix 后缀
+        suffix_match = re.search(r'--suffix[=\s]+["\']?([^"\'\n]+)["\']?', cmd)
+        if suffix_match:
+            params['suffix'] = suffix_match.group(1).strip()
+        
+        # 解析 --headers 自定义头
+        headers_match = re.search(r'--headers[=\s]+["\']?([^"\'\n]+)["\']?', cmd)
+        if headers_match:
+            params['headers'] = headers_match.group(1).strip()
+        
+        # 解析 --referer 伪造来源
+        referer_match = re.search(r'--referer[=\s]+["\']?([^"\'\s]+)["\']?', cmd)
+        if referer_match:
+            params['referer'] = referer_match.group(1)
+        
+        # 解析 --safe-url 安全URL
+        safe_url_match = re.search(r'--safe-url[=\s]+["\']?([^"\'\s]+)["\']?', cmd)
+        if safe_url_match:
+            params['safe_url'] = safe_url_match.group(1)
+        
+        # 解析 --safe-freq 安全URL访问频率
+        safe_freq_match = re.search(r'--safe-freq[=\s]+(\d+)', cmd)
+        if safe_freq_match:
+            params['safe_freq'] = int(safe_freq_match.group(1))
+        
+        # 解析 --union-cols 联合查询列数
+        union_cols_match = re.search(r'--union-cols[=\s]+(\d+)', cmd)
+        if union_cols_match:
+            params['union_cols'] = int(union_cols_match.group(1))
+        
         # 仅激进方案解析危险参数
-        if not is_safe:
+        if not is_safe and not is_moderate:
             if '--os-shell' in cmd:
                 params['os_shell'] = True
             if '--os-pwn' in cmd:
@@ -519,7 +608,12 @@ class AIPanel(QWidget):
     
     def _update_params_display(self):
         """更新参数显示和警告"""
-        params = self._safe_params if self._current_scheme == 'safe' else self._aggressive_params
+        if self._current_scheme == 'safe':
+            params = self._safe_params
+        elif self._current_scheme == 'moderate':
+            params = self._moderate_params
+        else:
+            params = self._aggressive_params
         
         if not params:
             self.params_label.setText("未检测到可用参数")
@@ -536,6 +630,21 @@ class AIPanel(QWidget):
             'random_agent': '随机 UA',
             'proxy': '代理',
             'dbms': '数据库类型',
+            'delay': '请求延时',
+            'time_sec': '时间盲注秒数',
+            'hpp': 'HTTP参数污染',
+            'chunked': '分块传输',
+            'hex': '十六进制编码',
+            'no_escape': '关闭转义',
+            'skip_urlencode': '跳过URL编码',
+            'mobile': '移动端模拟',
+            'prefix': 'Payload前缀',
+            'suffix': 'Payload后缀',
+            'headers': '自定义头',
+            'referer': '伪造来源',
+            'safe_url': '安全URL',
+            'safe_freq': '安全URL频率',
+            'union_cols': '联合查询列数',
             'os_shell': 'OS Shell',
             'os_pwn': 'OOB Shell'
         }
@@ -563,8 +672,10 @@ class AIPanel(QWidget):
         self.params_label.setText("\n".join(param_lines))
         
         # 显示警告
-        if warnings or self._current_scheme == 'aggressive':
-            if self._current_scheme == 'aggressive' and not warnings:
+        if warnings or self._current_scheme in ['moderate', 'aggressive']:
+            if self._current_scheme == 'moderate' and not warnings:
+                warnings.append("• 进阶方案会增加请求复杂度，可能影响扫描速度")
+            elif self._current_scheme == 'aggressive' and not warnings:
                 warnings.append("• 激进方案可能触发安全设备告警或影响目标服务稳定性")
             self.warning_label.setText("\n".join(warnings))
             self.warning_frame.setVisible(True)
@@ -573,17 +684,23 @@ class AIPanel(QWidget):
     
     def _apply_recommendations(self):
         """应用推荐参数"""
-        params = self._safe_params if self._current_scheme == 'safe' else self._aggressive_params
+        if self._current_scheme == 'safe':
+            params = self._safe_params
+        elif self._current_scheme == 'moderate':
+            params = self._moderate_params
+        else:
+            params = self._aggressive_params
         
         if not params:
             QMessageBox.information(self, "提示", "没有可应用的推荐参数")
             return
         
-        # 如果是激进方案或包含危险参数，显示确认对话框
+        # 如果是激进方案/进阶方案或包含危险参数，显示确认对话框
         warnings = self._get_param_warnings(params)
         
-        if warnings or self._current_scheme == 'aggressive':
-            scheme_name = "激进方案" if self._current_scheme == 'aggressive' else "安全方案"
+        if warnings or self._current_scheme in ['moderate', 'aggressive']:
+            scheme_names = {'safe': '安全方案', 'moderate': '进阶方案', 'aggressive': '激进方案'}
+            scheme_name = scheme_names.get(self._current_scheme, '安全方案')
             warning_text = "\n".join(warnings) if warnings else "激进方案可能触发安全告警"
             
             reply = QMessageBox.warning(
@@ -603,7 +720,8 @@ class AIPanel(QWidget):
         self.apply_params_requested.emit(params)
         
         # 更新状态
-        scheme_name = "安全方案" if self._current_scheme == 'safe' else "激进方案"
+        scheme_names = {'safe': '安全方案', 'moderate': '进阶方案', 'aggressive': '激进方案'}
+        scheme_name = scheme_names.get(self._current_scheme, '安全方案')
         self.status_label.setText(f"已应用{scheme_name}")
         self.status_label.setStyleSheet("color: #9ece6a;")
         
@@ -641,6 +759,7 @@ class AIPanel(QWidget):
         self.result_text.clear()
         self.scheme_group.setVisible(False)
         self._safe_params = {}
+        self._moderate_params = {}
         self._aggressive_params = {}
         self.apply_btn.setEnabled(False)
         self.warning_frame.setVisible(False)
@@ -650,4 +769,9 @@ class AIPanel(QWidget):
     
     def get_parsed_params(self) -> dict:
         """获取当前选择方案的参数"""
-        return self._safe_params.copy() if self._current_scheme == 'safe' else self._aggressive_params.copy()
+        if self._current_scheme == 'safe':
+            return self._safe_params.copy()
+        elif self._current_scheme == 'moderate':
+            return self._moderate_params.copy()
+        else:
+            return self._aggressive_params.copy()

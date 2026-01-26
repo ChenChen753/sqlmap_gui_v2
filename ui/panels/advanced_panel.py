@@ -374,15 +374,16 @@ class AdvancedPanel(QWidget):
         proxy_card.add_layout(proxy_layout)
         layout.addWidget(proxy_card)
         
-        # ==================== 数据库指定卡片 ====================
-        db_card = CardWidget("🗄️ 数据库配置")
+        # ==================== 数据库类型卡片 ====================
+        db_card = CardWidget("🗄️ 数据库类型")
         
         db_grid = QGridLayout()
         db_grid.setSpacing(10)
         
         # 数据库类型
-        self.dbms_check = QCheckBox("数据库类型:")
+        self.dbms_check = QCheckBox("指定数据库类型:")
         self.dbms_check.stateChanged.connect(self._on_dbms_check_changed)
+        self.dbms_check.setToolTip("指定后端数据库类型，可减少探测请求")
         db_grid.addWidget(self.dbms_check, 0, 0)
         
         self.dbms_combo = QComboBox()
@@ -400,6 +401,7 @@ class AdvancedPanel(QWidget):
         # 数据库版本
         self.dbms_version_check = QCheckBox("版本:")
         self.dbms_version_check.setEnabled(False)
+        self.dbms_version_check.setToolTip("指定数据库版本号")
         db_grid.addWidget(self.dbms_version_check, 0, 2)
         
         self.dbms_version_input = QLineEdit()
@@ -407,36 +409,6 @@ class AdvancedPanel(QWidget):
         self.dbms_version_input.setEnabled(False)
         self.dbms_version_input.setMaximumWidth(80)
         db_grid.addWidget(self.dbms_version_input, 0, 3)
-        
-        # 指定数据库名
-        self.target_db_check = QCheckBox("指定数据库:")
-        self.target_db_check.stateChanged.connect(self._on_target_db_check_changed)
-        db_grid.addWidget(self.target_db_check, 1, 0)
-        
-        self.target_db_input = QLineEdit()
-        self.target_db_input.setPlaceholderText("数据库名")
-        self.target_db_input.setEnabled(False)
-        db_grid.addWidget(self.target_db_input, 1, 1)
-        
-        # 指定表名
-        self.target_table_check = QCheckBox("指定表:")
-        self.target_table_check.stateChanged.connect(self._on_target_table_check_changed)
-        db_grid.addWidget(self.target_table_check, 1, 2)
-        
-        self.target_table_input = QLineEdit()
-        self.target_table_input.setPlaceholderText("表名")
-        self.target_table_input.setEnabled(False)
-        db_grid.addWidget(self.target_table_input, 1, 3)
-        
-        # 指定列
-        self.target_col_check = QCheckBox("指定列:")
-        self.target_col_check.stateChanged.connect(self._on_target_col_check_changed)
-        db_grid.addWidget(self.target_col_check, 2, 0)
-        
-        self.target_col_input = QLineEdit()
-        self.target_col_input.setPlaceholderText("列名，用逗号分隔")
-        self.target_col_input.setEnabled(False)
-        db_grid.addWidget(self.target_col_input, 2, 1, 1, 3)
         
         db_card.add_layout(db_grid)
         layout.addWidget(db_card)
@@ -578,17 +550,7 @@ class AdvancedPanel(QWidget):
         self.dbms_version_check.setEnabled(enabled)
         self.dbms_version_input.setEnabled(enabled and self.dbms_version_check.isChecked())
     
-    def _on_target_db_check_changed(self, state):
-        """目标数据库复选框变化"""
-        self.target_db_input.setEnabled(state == Qt.CheckState.Checked.value)
-    
-    def _on_target_table_check_changed(self, state):
-        """目标表复选框变化"""
-        self.target_table_input.setEnabled(state == Qt.CheckState.Checked.value)
-    
-    def _on_target_col_check_changed(self, state):
-        """目标列复选框变化"""
-        self.target_col_input.setEnabled(state == Qt.CheckState.Checked.value)
+
     
     def _on_os_cmd_check_changed(self, state):
         """OS 命令复选框变化"""
@@ -661,20 +623,7 @@ class AdvancedPanel(QWidget):
             return self.dbms_combo.currentText()
         return ""
     
-    def get_target_db(self) -> str:
-        if self.target_db_check.isChecked():
-            return self.target_db_input.text().strip()
-        return ""
-    
-    def get_target_table(self) -> str:
-        if self.target_table_check.isChecked():
-            return self.target_table_input.text().strip()
-        return ""
-    
-    def get_target_columns(self) -> str:
-        if self.target_col_check.isChecked():
-            return self.target_col_input.text().strip()
-        return ""
+
     
     def use_tor(self) -> bool:
         return self.tor_check.isChecked()
@@ -760,15 +709,7 @@ class AdvancedPanel(QWidget):
         """获取注入后缀"""
         return self.suffix_input.text().strip()
 
-    def set_target_db(self, db_name: str):
-        """设置目标数据库"""
-        self.target_db_check.setChecked(True)
-        self.target_db_input.setText(db_name)
-    
-    def set_target_table(self, table_name: str):
-        """设置目标表"""
-        self.target_table_check.setChecked(True)
-        self.target_table_input.setText(table_name)
+
     
     # ==================== AI 参数应用方法 ====================
     

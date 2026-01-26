@@ -479,6 +479,23 @@ class CommandBuilder:
         self._stop = stop
         return self
     
+    # ==================== 指定目标数据库/表/列 ====================
+    
+    def set_target_db(self, db: str) -> 'CommandBuilder':
+        """设置目标数据库名"""
+        self._target_db = db.strip() if db else ""
+        return self
+    
+    def set_target_table(self, table: str) -> 'CommandBuilder':
+        """设置目标表名"""
+        self._target_table = table.strip() if table else ""
+        return self
+    
+    def set_target_columns(self, columns: str) -> 'CommandBuilder':
+        """设置目标列名（多个用逗号分隔）"""
+        self._target_columns = columns.strip() if columns else ""
+        return self
+    
     # ==================== 搜索选项 ====================
     
     def search_columns(self, columns: str) -> 'CommandBuilder':

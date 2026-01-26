@@ -418,36 +418,94 @@ Payload 2: xxx
 - 遇到的问题（WAF、无注入点、连接失败等）
 - 问题原因分析
 
-**2. 安全方案（🟢 推荐）**
-保守稳定的优化建议，只关注漏洞检测：
-- risk 保持 1
-- level 控制在 1-3
-- 不推荐 os-shell、dump-all 等高级功能
+**2. WAF/防护识别**
+根据日志特征判断是否存在安全防护，常见特征：
+- 宝塔WAF: 返回501/403、包含"BTW"、"safedog"字样
+- 安全狗: 返回特定错误页面、拦截关键字
+- CloudFlare: 返回403/503、CF-RAY头、质询页面
+- 阿里云WAF: 返回405、特定拦截页面
+- 长亭雷池: 返回特定JSON错误
 
-| 参数 | 推荐值 | 说明 |
-|------|--------|------|
-| --tamper | 脚本名 | 绕过过滤 |
-| --level | 1-3 | 适度探测 |
-| --risk | 1 | 保持安全 |
+**3. 绕过方案（请提供至少3种不同角度的方案）**
 
-**安全方案命令：**
+##### 方案A：Tamper脚本绕过
+根据目标情况，从以下脚本中选择合适的组合：
+- 空格绕过: `space2comment`(/**/替换空格), `space2plus`(+替换), `space2randomblank`(随机空白符)
+- 大小写混淆: `randomcase`(随机大小写), `randomcomments`(随机注释)
+- 编码绕过: `charencode`(URL编码), `base64encode`(Base64), `htmlencode`(HTML实体)
+- 关键字绕过: `between`(用BETWEEN替换>), `equaltolike`(=替换为LIKE), `greatest`(用GREATEST替换>)
+-Unicode/宽字节: `charunicodeencode`(Unicode编码), `unmagicquotes`(宽字节绕过GPC)
+- 注释干扰: `modsecurityversioned`(版本号注释), `versionedkeywords`(关键字版本化)
+- 内联注释: `halfversionedmorekeywords`, `versionedmorekeywords`
+- 特定WAF: `securesphere`(Imperva), `xforwardedfor`(IP伪造)
+
+##### 方案B：请求头伪装绕过
+| 参数 | 说明 |
+|------|------|
+| --random-agent | 随机User-Agent，绕过UA检测 |
+| --mobile | 模拟移动端请求 |
+| --referer="http://target.com" | 伪造来源页面 |
+| --headers="X-Forwarded-For: 127.0.0.1" | 伪造内网IP |
+| --headers="X-Originating-IP: 127.0.0.1" | 伪造源IP |
+| --host="trusted.com" | 伪造Host头 |
+
+##### 方案C：编码与格式绕过
+| 参数 | 说明 |
+|------|------|
+| --hex | 使用十六进制编码 |
+| --no-escape | 关闭payload转义 |
+| --skip-urlencode | 跳过URL编码 |
+| --chunked | 使用分块传输(HTTP/1.1) |
+| --hpp | HTTP参数污染 |
+
+##### 方案D：延时与隐蔽绕过
+| 参数 | 说明 |
+|------|------|
+| --delay=2 | 每次请求延迟2秒 |
+| --time-sec=15 | 时间盲注等待时间 |
+| --randomize="参数名" | 随机化参数值 |
+| --safe-url="正常页面" | 定期访问正常页面 |
+| --safe-freq=3 | 每3次请求访问一次安全URL |
+
+##### 方案E：注入技术调整
+| 参数 | 说明 |
+|------|------|
+| --technique=B | 只用布尔盲注(更隐蔽) |
+| --technique=T | 只用时间盲注(最隐蔽) |
+| --technique=E | 只用报错注入(最快) |
+| --prefix="'" | 自定义payload前缀 |
+| --suffix="-- -" | 自定义payload后缀 |
+| --dbms=mysql | 指定数据库类型减少探测 |
+| --union-cols=5 | 指定联合查询列数 |
+
+**4. 推荐组合方案**
+
+🟢 **安全方案（低风险）**
 ```
-[SAFE] --tamper=xxx --level=2 --risk=1 --threads=3 --random-agent --batch
+[SAFE] --tamper=space2comment,randomcase --random-agent --delay=1 --level=2 --risk=1 --batch
 ```
 
-**3. 激进方案（🔴 谨慎）**
-高风险方案，需用户确认：
-
+🟡 **进阶方案（中等风险）**
 ```
-[AGGRESSIVE] --level=5 --risk=3 --tamper=xxx
+[MODERATE] --tamper=between,charencode,space2randomblank --random-agent --hpp --level=3 --risk=2 --batch
 ```
 
-**4. 专家建议**
-其他测试思路或绕过技巧
+🔴 **激进方案（高风险，需用户确认）**
+```
+[AGGRESSIVE] --tamper=unmagicquotes,modsecurityversioned,space2comment --level=5 --risk=3 --chunked --hex --batch
+```
+
+**5. 专家技巧**
+针对当前情况的特殊建议，例如：
+- 尝试不同注入点（POST/Cookie/Header）
+- 更换HTTP方法（GET↔POST）
+- 尝试二阶注入
+- 使用代理池分散请求
+- 分析响应差异调整判断逻辑
 
 ---
 
-请用中文回答。根据日志实际情况选择上述两种格式之一回复。"""
+请用中文回答。根据日志实际情况选择上述两种格式之一回复，并根据具体问题选择最合适的绕过组合。"""
         
         return self._send_request(prompt, callback)
     

@@ -542,15 +542,18 @@ class MainWindow(QMainWindow):
         builder.dump_data(self.scan_panel.get_dump())
         builder.dump_all(self.scan_panel.get_dump_all())
         
-        # 搜索功能
-        search_enabled, search_type, search_keyword = self.scan_panel.get_search()
-        if search_enabled and search_keyword:
-            if search_type == 0:  # 列名
-                builder.search_columns(search_keyword)
-            elif search_type == 1:  # 表名
-                builder.search_tables(search_keyword)
-            elif search_type == 2:  # 数据库名
-                builder.search_dbs(search_keyword)
+        # 指定目标数据库/表/列
+        target_db = self.scan_panel.get_target_db()
+        if target_db:
+            builder.set_target_db(target_db)
+        
+        target_table = self.scan_panel.get_target_table()
+        if target_table:
+            builder.set_target_table(target_table)
+        
+        target_columns = self.scan_panel.get_target_columns()
+        if target_columns:
+            builder.set_target_columns(target_columns)
         
         # 限制行数
         limit_enabled, limit_start, limit_stop = self.scan_panel.get_limit()
@@ -632,23 +635,10 @@ class MainWindow(QMainWindow):
         if self.advanced_panel.is_skip_waf():
             builder.set_skip_waf(True)
         
-        # 数据库指定
+        # 数据库类型指定
         dbms = self.advanced_panel.get_dbms()
         if dbms:
             builder.set_dbms(dbms)
-        
-        # 目标数据库/表/列
-        target_db = self.advanced_panel.get_target_db()
-        if target_db:
-            builder.enum_tables(db=target_db)
-        
-        target_table = self.advanced_panel.get_target_table()
-        if target_table:
-            builder.enum_columns(table=target_table)
-        
-        target_columns = self.advanced_panel.get_target_columns()
-        if target_columns:
-            builder.dump_data(columns=target_columns)
         
         # 操作系统功能
         if self.advanced_panel.get_os_shell():
@@ -1037,13 +1027,11 @@ class MainWindow(QMainWindow):
             return
             
         # 2. 配置扫描参数
-        # 切换到高级面板设置目标数据库
-        self.advanced_panel.set_target_db(db_name)
+        # 在扫描面板设置目标数据库
+        self.scan_panel.set_target_db(db_name)
         
-        # 切换到扫描面板设置 dump
-        self.scan_panel.set_dump(True)  # 或者 set_dump_all(True) 取決于需求，这里上下文是提取全部数据
-        # 上下文里的菜单是 "提取全部数据"，所以可能意图是 dump-all 或者是 dump 当前DB的所有表
-        # dump + -D dbname 通常会 dump 该库下所有表
+        # 设置 dump 模式
+        self.scan_panel.set_dump(True)
         
         # 3. 提示用户
         QMessageBox.information(

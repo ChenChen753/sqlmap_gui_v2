@@ -206,22 +206,38 @@ class ScanPanel(QWidget):
         self.dump_all_check.setToolTip("提取所有表的数据")
         dump_grid.addWidget(self.dump_all_check, 0, 1)
         
-        self.search_check = QCheckBox("搜索数据:")
-        self.search_check.stateChanged.connect(self._on_search_check_changed)
-        dump_grid.addWidget(self.search_check, 0, 2)
+        # 指定数据库
+        self.target_db_check = QCheckBox("指定数据库:")
+        self.target_db_check.stateChanged.connect(self._on_target_db_check_changed)
+        self.target_db_check.setToolTip("指定要操作的数据库名 (-D)")
+        dump_grid.addWidget(self.target_db_check, 1, 0)
         
-        # 搜索选项
-        search_layout = QHBoxLayout()
-        self.search_type_combo = QComboBox()
-        self.search_type_combo.addItems(["列名 (-C)", "表名 (-T)", "数据库名 (-D)"])
-        self.search_type_combo.setEnabled(False)
-        search_layout.addWidget(self.search_type_combo)
+        self.target_db_input = QLineEdit()
+        self.target_db_input.setPlaceholderText("数据库名")
+        self.target_db_input.setEnabled(False)
+        dump_grid.addWidget(self.target_db_input, 1, 1)
         
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("搜索关键词")
-        self.search_input.setEnabled(False)
-        search_layout.addWidget(self.search_input)
-        dump_grid.addLayout(search_layout, 1, 0, 1, 3)
+        # 指定表
+        self.target_table_check = QCheckBox("指定表:")
+        self.target_table_check.stateChanged.connect(self._on_target_table_check_changed)
+        self.target_table_check.setToolTip("指定要操作的表名 (-T)")
+        dump_grid.addWidget(self.target_table_check, 1, 2)
+        
+        self.target_table_input = QLineEdit()
+        self.target_table_input.setPlaceholderText("表名")
+        self.target_table_input.setEnabled(False)
+        dump_grid.addWidget(self.target_table_input, 1, 3)
+        
+        # 指定列
+        self.target_col_check = QCheckBox("指定列:")
+        self.target_col_check.stateChanged.connect(self._on_target_col_check_changed)
+        self.target_col_check.setToolTip("指定要操作的列名 (-C)，多个用逗号分隔")
+        dump_grid.addWidget(self.target_col_check, 2, 0)
+        
+        self.target_col_input = QLineEdit()
+        self.target_col_input.setPlaceholderText("列名，用逗号分隔")
+        self.target_col_input.setEnabled(False)
+        dump_grid.addWidget(self.target_col_input, 2, 1, 1, 3)
         
         # 提取限制
         limit_layout = QHBoxLayout()
@@ -243,7 +259,7 @@ class ScanPanel(QWidget):
         limit_layout.addWidget(self.limit_stop_spin)
         
         limit_layout.addStretch()
-        dump_grid.addLayout(limit_layout, 2, 0, 1, 3)
+        dump_grid.addLayout(limit_layout, 3, 0, 1, 4)
         
         dump_card.add_layout(dump_grid)
         layout.addWidget(dump_card)
@@ -295,11 +311,17 @@ class ScanPanel(QWidget):
         """字符串匹配变化"""
         self.string_input.setEnabled(state == Qt.CheckState.Checked.value)
     
-    def _on_search_check_changed(self, state):
-        """搜索变化"""
-        enabled = state == Qt.CheckState.Checked.value
-        self.search_type_combo.setEnabled(enabled)
-        self.search_input.setEnabled(enabled)
+    def _on_target_db_check_changed(self, state):
+        """目标数据库复选框变化"""
+        self.target_db_input.setEnabled(state == Qt.CheckState.Checked.value)
+    
+    def _on_target_table_check_changed(self, state):
+        """目标表复选框变化"""
+        self.target_table_input.setEnabled(state == Qt.CheckState.Checked.value)
+    
+    def _on_target_col_check_changed(self, state):
+        """目标列复选框变化"""
+        self.target_col_input.setEnabled(state == Qt.CheckState.Checked.value)
     
     def _on_limit_check_changed(self, state):
         """限制变化"""
@@ -439,15 +461,23 @@ class ScanPanel(QWidget):
     def get_dump_all(self) -> bool:
         return self.dump_all_check.isChecked()
     
-    def get_search(self) -> tuple:
-        """获取搜索配置 (是否搜索, 类型, 关键词)
-        类型: 0=列名(-C), 1=表名(-T), 2=数据库名(-D)
-        """
-        if self.search_check.isChecked():
-            keyword = self.search_input.text().strip()
-            search_type = self.search_type_combo.currentIndex()
-            return True, search_type, keyword
-        return False, 0, ""
+    def get_target_db(self) -> str:
+        """获取指定数据库名"""
+        if self.target_db_check.isChecked():
+            return self.target_db_input.text().strip()
+        return ""
+    
+    def get_target_table(self) -> str:
+        """获取指定表名"""
+        if self.target_table_check.isChecked():
+            return self.target_table_input.text().strip()
+        return ""
+    
+    def get_target_columns(self) -> str:
+        """获取指定列名"""
+        if self.target_col_check.isChecked():
+            return self.target_col_input.text().strip()
+        return ""
     
     def get_limit(self) -> tuple:
         """获取限制行数配置 (是否限制, 起始, 结束)"""
@@ -543,4 +573,22 @@ class ScanPanel(QWidget):
         """设置注入技术"""
         for code, check in self.tech_checks.items():
             check.setChecked(code in technique.upper())
+    
+    def set_target_db(self, db_name: str):
+        """设置目标数据库"""
+        if db_name:
+            self.target_db_check.setChecked(True)
+            self.target_db_input.setText(db_name)
+    
+    def set_target_table(self, table_name: str):
+        """设置目标表"""
+        if table_name:
+            self.target_table_check.setChecked(True)
+            self.target_table_input.setText(table_name)
+    
+    def set_target_columns(self, columns: str):
+        """设置目标列"""
+        if columns:
+            self.target_col_check.setChecked(True)
+            self.target_col_input.setText(columns)
 
