@@ -37,7 +37,7 @@ def main():
     
     # 设置应用属性
     app.setApplicationName("SQLMap GUI v2")
-    app.setApplicationVersion("2.1.3")
+    app.setApplicationVersion("2.2.1")
     app.setOrganizationName("SQLMap GUI")
     
     # 确保仅在最后一个窗口关闭时退出
