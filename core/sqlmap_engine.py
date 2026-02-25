@@ -73,7 +73,7 @@ class SqlmapEngine(QThread):
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                stdin=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,  # 使用 DEVNULL 避免 sqlmap 尝试从 stdin 读取目标
                 universal_newlines=True,
                 startupinfo=startupinfo,
                 bufsize=1
@@ -158,13 +158,14 @@ class SqlmapEngine(QThread):
         self.status_changed.emit("已停止")
     
     def send_input(self, text: str):
-        """发送输入到进程"""
-        if self.process and self.process.poll() is None:
-            try:
-                self.process.stdin.write(text + '\n')
-                self.process.stdin.flush()
-            except Exception:
-                pass
+        """发送输入到进程
+        
+        注意：由于使用 --batch 模式且 stdin 设置为 DEVNULL，此方法当前不可用。
+        如果需要交互式输入，需要修改 Popen 的 stdin 参数。
+        """
+        # stdin 已设置为 DEVNULL，无法发送输入
+        # 保留此方法以备将来需要交互式模式时使用
+        pass
     
     def _save_data_buffer(self):
         """保存数据缓冲区中的数据"""

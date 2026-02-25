@@ -36,3 +36,4 @@ build/
 
 # 日志文件
 *.log
+sqlmap_log.txt

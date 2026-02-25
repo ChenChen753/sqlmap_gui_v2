@@ -616,6 +616,16 @@ class CommandBuilder:
     
     # ==================== 构建命令 ====================
     
+    def _normalize_path(self, path: str) -> str:
+        """
+        规范化文件路径，解决 Windows 上的路径问题
+        将反斜杠转换为正斜杠，避免 shell 转义问题
+        """
+        if path:
+            # 将 Windows 反斜杠转换为正斜杠
+            return path.replace('\\', '/')
+        return path
+    
     def build(self) -> str:
         """构建完整的 sqlmap 命令"""
         if not self._target and not self._file and not self._request_file:
@@ -626,9 +636,13 @@ class CommandBuilder:
         # 目标
         if self._request_file:
             # HTTP 请求包文件（-r 参数，用于头注入）
-            parts.append(f'-r "{self._request_file}"')
+            # 规范化路径以避免 Windows shell 转义问题
+            normalized_path = self._normalize_path(self._request_file)
+            parts.append(f'-r "{normalized_path}"')
         elif self._file:
-            parts.append(f'-m "{self._file}"')
+            # 批量扫描文件（-m 参数）
+            normalized_path = self._normalize_path(self._file)
+            parts.append(f'-m "{normalized_path}"')
         else:
             parts.append(f'-u "{self._target}"')
         
@@ -727,7 +741,8 @@ class CommandBuilder:
         if self._proxy:
             parts.append(f'--proxy="{self._proxy}"')
         if self._proxy_file:
-            parts.append(f'--proxy-file="{self._proxy_file}"')
+            normalized_proxy_file = self._normalize_path(self._proxy_file)
+            parts.append(f'--proxy-file="{normalized_proxy_file}"')
         if self._safe_url:
             parts.append(f'--safe-url="{self._safe_url}"')
         if self._tor:
@@ -820,12 +835,14 @@ class CommandBuilder:
         if self._file_read:
             parts.append(f'--file-read="{self._file_read}"')
         if self._file_write and self._file_dest:
-            parts.append(f'--file-write="{self._file_write}"')
+            normalized_file_write = self._normalize_path(self._file_write)
+            parts.append(f'--file-write="{normalized_file_write}"')
             parts.append(f'--file-dest="{self._file_dest}"')
         
         # 输出目录
         if self._output_dir:
-            parts.append(f'--output-dir="{self._output_dir}"')
+            normalized_output_dir = self._normalize_path(self._output_dir)
+            parts.append(f'--output-dir="{normalized_output_dir}"')
         
         return ' '.join(parts)
     
