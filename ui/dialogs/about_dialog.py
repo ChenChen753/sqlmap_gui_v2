@@ -35,7 +35,7 @@ class AboutDialog(QDialog):
         layout.addWidget(title)
         
         # 版本
-        version = QLabel("版本 2.2.1")
+        version = QLabel("版本 2.2.3")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         version.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 12px;")
         layout.addWidget(version)
