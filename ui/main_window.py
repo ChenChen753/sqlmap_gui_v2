@@ -242,8 +242,11 @@ class MainWindow(QMainWindow):
         
         # 结果面板
         self.result_panel = ResultPanel()
-        self.result_panel.db_selected.connect(self._on_db_selected)  # 假设需要处理数据库选择
+        self.result_panel.db_selected.connect(self._on_db_selected)  # 左键单击数据库
+        self.result_panel.get_tables_requested.connect(self._on_get_tables_requested)  # 右键菜单获取表列表
         self.result_panel.dump_requested.connect(self._on_dump_requested)
+        self.result_panel.get_columns_requested.connect(self._on_get_columns_requested)
+        self.result_panel.dump_table_requested.connect(self._on_dump_table_requested)
         tabs.addTab(self.result_panel, "📊 结果")
         
         # AI 分析面板
@@ -568,7 +571,13 @@ class MainWindow(QMainWindow):
         
         # 高级选项 - 通用
         builder.set_batch(self.advanced_panel.is_batch_mode())
-        builder.set_flush_session(self.advanced_panel.is_flush_session())
+
+        # 批量扫描模式下自动启用 flush-session，避免使用旧 session 导致跳过 URL
+        if self.target_panel.is_file_mode():
+            builder.set_flush_session(True)
+        else:
+            builder.set_flush_session(self.advanced_panel.is_flush_session())
+
         builder.set_fresh_queries(self.advanced_panel.is_fresh_queries())
         
         # 新增：表单、爬取、智能模式等
@@ -762,7 +771,7 @@ class MainWindow(QMainWindow):
         if not self.sqlmap_path:
             QMessageBox.warning(self, "警告", "未找到 sqlmap，请检查配置。")
             return
-        
+
         # 检查目标（根据模式判断）
         if self.target_panel.is_request_mode():
             # 请求包模式：检查是否有请求包文件或内容
@@ -778,41 +787,343 @@ class MainWindow(QMainWindow):
             if not target:
                 QMessageBox.warning(self, "警告", "请输入目标 URL。")
                 return
-        
+
+        # 清空之前的结果
+        self.log_panel.clear()
+        self.result_panel.clear_all()
+
+        # 检查是否为批量模式
+        if self.target_panel.is_file_mode():
+            # 批量模式：循环扫描每个URL
+            self._start_batch_scan_loop(target)
+        else:
+            # 单URL模式：直接扫描
+            self._start_single_scan(target)
+
+    def _start_single_scan(self, target: str):
+        """单URL扫描"""
         # 构建命令
         try:
             command = self._build_command()
         except Exception as e:
             QMessageBox.warning(self, "错误", f"构建命令失败: {str(e)}")
             return
-        
-        # 清空之前的结果
-        self.log_panel.clear()
-        self.result_panel.clear_all()
-        
+
         # 更新 UI 状态
         self._set_scanning_state(True)
-        
+
         # 记录历史
         mode = self.scan_panel.get_current_mode()
         self.current_scan_id = self.history.add_scan(target, command, mode)
-        
+
         # 开始计时
         self.scan_start_time = datetime.now()
         self.elapsed_timer.start(1000)
-        
-        # 启动引擎 - 传入 self 作为父对象确保线程生命周期与主窗口绑定
+
+        # 启动引擎
         self.engine = SqlmapEngine(command, self.sqlmap_path, parent=self)
-        # 使用队列连接确保信号在主线程中处理
         self.engine.output_received.connect(self._on_output, Qt.ConnectionType.QueuedConnection)
         self.engine.progress_updated.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
         self.engine.result_found.connect(self._on_result, Qt.ConnectionType.QueuedConnection)
         self.engine.scan_finished.connect(self._on_finished, Qt.ConnectionType.QueuedConnection)
         self.engine.status_changed.connect(self._on_status_changed, Qt.ConnectionType.QueuedConnection)
         self.engine.start()
-        
+
         self.log_panel.start_logging()
-    
+
+    def _start_batch_scan_loop(self, file_path: str):
+        """批量扫描循环 - 逐个扫描每个URL"""
+        # 调试信息
+        debug_info = f"[DEBUG] 批量扫描文件路径: {file_path}"
+        print(debug_info)
+        self.log_panel.append_line(debug_info, "INFO")
+
+        # 读取URL列表
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                urls = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+            debug_info = f"[DEBUG] 读取到的URL数量: {len(urls)}"
+            print(debug_info)
+            self.log_panel.append_line(debug_info, "INFO")
+            if urls:
+                debug_info = f"[DEBUG] 第一个URL: {urls[0]}"
+                print(debug_info)
+                self.log_panel.append_line(debug_info, "INFO")
+        except Exception as e:
+            debug_info = f"[DEBUG] 读取文件错误: {e}"
+            print(debug_info)
+            self.log_panel.append_line(debug_info, "ERROR")
+            QMessageBox.warning(self, "错误", f"读取URL文件失败: {str(e)}")
+            return
+
+        if not urls:
+            QMessageBox.warning(self, "警告", "URL文件为空或格式不正确")
+            return
+
+        # 初始化批量扫描结果存储
+        self._batch_scan_results = []
+        self._current_batch_index = 0
+        self._total_batch_count = len(urls)
+
+        # 更新UI显示批量模式
+        self._set_scanning_state(True)
+        self.status_label.setText(f"批量扫描: 0/{self._total_batch_count}")
+
+        # 记录历史
+        mode = self.scan_panel.get_current_mode()
+        command_preview = self._build_command()
+        self.current_scan_id = self.history.add_scan(f"[批量] {len(urls)} 个URL", command_preview, mode)
+
+        # 开始计时
+        self.scan_start_time = datetime.now()
+        self.elapsed_timer.start(1000)
+
+        # 开始扫描第一个URL
+        self._run_next_batch_url(urls)
+
+    def _run_next_batch_url(self, urls: list):
+        """运行下一个URL的扫描"""
+        if self._current_batch_index >= len(urls):
+            # 所有URL扫描完成
+            self._on_batch_scan_finished()
+            return
+
+        # 检查是否被用户停止（只有当引擎已创建且正在运行时才检查）
+        # 第一次调用时 engine 还不存在，需要跳过这个检查
+        if hasattr(self, '_stop_batch_scan') and self._stop_batch_scan:
+            self._on_batch_scan_finished()
+            return
+
+        current_url = urls[self._current_batch_index]
+        self._current_batch_url = current_url
+
+        # 更新状态
+        self.status_label.setText(f"批量扫描: [{self._current_batch_index + 1}/{len(urls)}] {current_url[:40]}...")
+        self.log_panel.append_line(f"\n{'='*50}", "INFO")
+        self.log_panel.append_line(f"[{self._current_batch_index + 1}/{len(urls)}] 开始扫描: {current_url}", "INFO")
+        self.log_panel.append_line(f"{'='*50}\n", "INFO")
+
+        # 为当前URL构建命令（不使用 -m 参数）
+        try:
+            command = self._build_command_for_batch(current_url)
+        except Exception as e:
+            self.log_panel.append_line(f"[错误] 构建命令失败: {str(e)}", "ERROR")
+            # 记录这个URL失败并继续下一个
+            self._batch_scan_results.append({
+                'url': current_url,
+                'status': 'error',
+                'error': str(e),
+                'injection_found': False
+            })
+            self._current_batch_index += 1
+            # 延迟一下再扫描下一个，让UI有时间更新
+            QTimer.singleShot(500, lambda: self._run_next_batch_url(urls))
+            return
+
+        # 启动引擎扫描这个URL
+        self.engine = SqlmapEngine(command, self.sqlmap_path, parent=self)
+        self.engine.output_received.connect(self._on_batch_output, Qt.ConnectionType.QueuedConnection)
+        self.engine.progress_updated.connect(self._on_progress, Qt.ConnectionType.QueuedConnection)
+        self.engine.result_found.connect(self._on_batch_result, Qt.ConnectionType.QueuedConnection)
+        self.engine.scan_finished.connect(lambda code: self._on_batch_url_finished(code, urls), Qt.ConnectionType.QueuedConnection)
+        self.engine.status_changed.connect(self._on_status_changed, Qt.ConnectionType.QueuedConnection)
+        self.engine.start()
+
+        self.log_panel.start_logging()
+
+    def _build_command_for_batch(self, url: str) -> str:
+        """为批量扫描构建单个URL的命令（不使用 -m 参数）"""
+        # 创建命令构建器 - 传入正确的 sqlmap 路径
+        sqlmap_cmd = f"python \"{self.sqlmap_path}\""
+        builder = CommandBuilder(sqlmap_cmd)
+
+        # 设置目标URL
+        builder.set_target(url)
+
+        # 复制其他设置（从当前面板设置）
+        # 扫描选项 - 和单条扫描保持一致
+        builder.set_level(self.scan_panel.get_level())
+        builder.set_risk(self.scan_panel.get_risk())
+        builder.set_technique(self.scan_panel.get_technique())
+        builder.set_verbose(self.scan_panel.get_verbose())
+
+        # 字符串匹配
+        string_match = self.scan_panel.get_string_match()
+        if string_match:
+            builder.set_string(string_match)
+
+        # 信息枚举 (CommandBuilder 使用 get_xxx 方法)
+        if self.scan_panel.get_current_db():
+            builder.get_current_db(True)
+        if self.scan_panel.get_current_user():
+            builder.get_current_user(True)
+        if self.scan_panel.get_banner():
+            builder.get_banner(True)
+        if self.scan_panel.get_hostname():
+            builder.get_hostname(True)
+        if self.scan_panel.get_is_dba():
+            builder.get_is_dba(True)
+        if self.scan_panel.get_users():
+            builder.get_users(True)
+        if self.scan_panel.get_dbs():
+            builder.enum_dbs(True)
+        if self.scan_panel.get_tables():
+            builder.enum_tables(True)
+        if self.scan_panel.get_columns():
+            builder.enum_columns(True)
+        if self.scan_panel.get_schema():
+            builder.enum_schema(True)
+        if self.scan_panel.get_count():
+            builder.enum_count(True)
+        if self.scan_panel.get_privileges():
+            builder.get_privileges(True)
+        if self.scan_panel.get_passwords():
+            builder.enum_passwords(True)
+        if self.scan_panel.get_roles():
+            builder.get_roles(True)
+        if self.scan_panel.get_comments():
+            builder.enum_comments(True)
+
+        # 数据提取
+        if self.scan_panel.get_dump():
+            builder.dump_data(True)
+        if self.scan_panel.get_dump_all():
+            builder.dump_all(True)
+
+        # 指定数据库/表/列
+        target_db = self.scan_panel.get_target_db()
+        if target_db:
+            builder.set_target_db(target_db)
+        target_table = self.scan_panel.get_target_table()
+        if target_table:
+            builder.set_target_table(target_table)
+        target_columns = self.scan_panel.get_target_columns()
+        if target_columns:
+            builder.set_target_columns(target_columns)
+
+        # 限制
+        limit_enabled, start, stop = self.scan_panel.get_limit()
+        if limit_enabled:
+            builder.set_limit(start, stop)
+
+        # POST 数据
+        post_data = self.target_panel.get_post_data()
+        if post_data:
+            builder.set_data(post_data)
+
+        # Cookie
+        cookie = self.target_panel.get_cookie()
+        if cookie:
+            builder.set_cookie(cookie)
+
+        # 指定参数
+        param = self.target_panel.get_param()
+        if param:
+            builder.set_param(param)
+
+        # User-Agent
+        if self.target_panel.ua_check.isChecked():
+            if self.target_panel.use_random_agent():
+                builder.set_random_agent(True)
+            else:
+                ua = self.target_panel.get_user_agent()
+                if ua:
+                    builder.set_user_agent(ua)
+
+        # 高级选项
+        builder.set_timeout(self.advanced_panel.get_timeout())
+        builder.set_retries(self.advanced_panel.get_retries())
+        builder.set_delay(self.advanced_panel.get_delay())
+
+        # 通用选项
+        builder.set_batch(True)  # 批量模式始终使用非交互
+        builder.set_flush_session(True)  # 每个URL都刷新会话
+        builder.set_fresh_queries(self.advanced_panel.is_fresh_queries())
+
+        # 其他高级选项
+        if self.advanced_panel.is_forms():
+            builder.set_forms(True)
+        crawl = self.advanced_panel.get_crawl()
+        if crawl > 0:
+            builder.set_crawl(crawl)
+        if self.advanced_panel.is_smart():
+            builder.set_smart(True)
+        if self.advanced_panel.is_text_only():
+            builder.set_text_only(True)
+        if self.advanced_panel.is_null_connection():
+            builder.set_null_connection(True)
+        if self.advanced_panel.is_no_cast():
+            builder.set_no_cast(True)
+
+        # 绕过设置
+        tamper = self.advanced_panel.get_tamper()
+        if tamper:
+            builder.set_tamper(tamper)
+
+        # 代理
+        proxy = self.advanced_panel.get_proxy()
+        if proxy:
+            builder.set_proxy(proxy)
+
+        return builder.build()
+
+    def _on_batch_output(self, text: str):
+        """批量扫描的输出"""
+        self.log_panel.append(text)
+
+    def _on_batch_result(self, results: dict):
+        """批量扫描的结果"""
+        # 保存当前URL的结果
+        url_result = {
+            'url': self._current_batch_url,
+            'status': 'completed',
+            'injection_found': results.get('injection_found', False),
+            'injection_type': results.get('injection_type', []),
+            'dbms': results.get('dbms', ''),
+            'current_db': results.get('current_db', ''),
+            'current_user': results.get('current_user', ''),
+            'databases': results.get('databases', []),
+            'tables': results.get('tables', {}),
+            'columns': results.get('columns', {}),
+            'data': results.get('data', {}),
+        }
+        self._batch_scan_results.append(url_result)
+
+    def _on_batch_url_finished(self, return_code: int, urls: list):
+        """单个URL扫描完成"""
+        # 更新结果面板显示当前URL的状态
+        if self._batch_scan_results:
+            latest = self._batch_scan_results[-1]
+            if latest['injection_found']:
+                self.log_panel.append_line(f"\n[结果] {self._current_batch_url} - 发现漏洞!", "SUCCESS")
+            else:
+                self.log_panel.append_line(f"\n[结果] {self._current_batch_url} - 未发现漏洞", "INFO")
+
+        # 移动到下一个URL
+        self._current_batch_index += 1
+        self._run_next_batch_url(urls)
+
+    def _on_batch_scan_finished(self):
+        """批量扫描全部完成"""
+        self._set_scanning_state(False)
+        self.elapsed_timer.stop()
+        self.log_panel.stop_logging()
+
+        # 更新结果面板
+        if hasattr(self, '_batch_scan_results') and self._batch_scan_results:
+            self.result_panel.set_batch_results(self._batch_scan_results)
+            self.result_panel.result_tabs.setCurrentIndex(3)  # 切换到批量结果标签页
+
+        # 统计
+        total = len(self._batch_scan_results)
+        vuln_count = sum(1 for r in self._batch_scan_results if r.get('injection_found'))
+
+        self.log_panel.append_line(f"\n{'='*50}", "INFO")
+        self.log_panel.append_line(f"批量扫描完成! 共扫描 {total} 个URL，发现 {vuln_count} 个漏洞", "SUCCESS")
+        self.log_panel.append_line(f"{'='*50}\n", "INFO")
+
+        self.status_label.setText(f"批量扫描完成: {vuln_count}/{total} 个漏洞")
+
     def stop_scan(self):
         """停止扫描"""
         if self.engine and self.engine.isRunning():
@@ -913,12 +1224,19 @@ class MainWindow(QMainWindow):
         vuln_count = 1 if results.get('injection_found') else 0
         db_count = len(results.get('databases', []))
         table_count = sum(len(tables) for tables in results.get('tables', {}).values())
-        
+
         self.result_panel.update_stats(
             vuln_count=vuln_count,
             db_count=db_count,
             table_count=table_count
         )
+
+        # 处理批量扫描结果
+        batch_results = results.get('batch_results', [])
+        if batch_results:
+            self.result_panel.set_batch_results(batch_results)
+            # 切换到批量结果标签页
+            self.result_panel.result_tabs.setCurrentIndex(3)  # 批量结果标签页索引
     
     def _on_finished(self, return_code: int):
         """扫描完成"""
@@ -926,11 +1244,21 @@ class MainWindow(QMainWindow):
             self._set_scanning_state(False)
             self.elapsed_timer.stop()
             self.log_panel.stop_logging()
-            
+
             # 更新历史记录
             if self.current_scan_id and self.engine:
                 try:
                     results = self.engine.results
+
+                    # 如果是批量扫描，确保获取所有URL的结果
+                    if hasattr(self.engine, 'get_batch_results'):
+                        batch_results = self.engine.get_batch_results()
+                        if batch_results:
+                            results['batch_results'] = batch_results
+                            # 切换到批量结果标签页
+                            self.result_panel.set_batch_results(batch_results)
+                            self.result_panel.result_tabs.setCurrentIndex(3)
+
                     self.history.complete_scan(
                         self.current_scan_id,
                         has_vuln=results.get('injection_found', False),
@@ -940,7 +1268,7 @@ class MainWindow(QMainWindow):
                     )
                 except Exception:
                     pass
-            
+
             # 显示完成消息
             if return_code == 0:
                 self.log_panel.append_line("扫描完成", "SUCCESS")
@@ -1008,12 +1336,37 @@ class MainWindow(QMainWindow):
         """设置变化"""
         # 重新查找 sqlmap
         self._find_sqlmap()
-    
+
     def _on_db_selected(self, db_name: str):
-        """数据库选择变化"""
+        """左键单击数据库 - 只更新显示，不触发扫描"""
+        # 左键单击只是切换显示该数据库的表列表
         pass
 
-    
+    def _on_get_tables_requested(self, db_name: str):
+        """右键菜单获取表列表 - 确认后配置参数"""
+        # 1. 确认
+        reply = QMessageBox.question(
+            self, "确认获取",
+            f"确定要获取数据库 '{db_name}' 的表列表吗？\n\n这将会启动一个新的扫描任务。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # 2. 配置扫描参数
+        # 设置目标数据库（会自动勾选）
+        self.scan_panel.set_target_db(db_name)
+
+        # 勾选枚举表选项
+        self.scan_panel.tables_check.setChecked(True)
+
+        # 3. 提示用户
+        QMessageBox.information(
+            self, "准备就绪",
+            f"已配置获取数据库 '{db_name}' 的表列表参数。\n\n请点击 '开始扫描' 按钮启动任务。"
+        )
+
     def _on_dump_requested(self, db_name: str):
         """处理提取数据请求"""
         # 1. 确认
@@ -1041,7 +1394,63 @@ class MainWindow(QMainWindow):
         
         # 可选：自动点击开始
         # self.start_scan()
-    
+
+    def _on_get_columns_requested(self, db_name: str, table_name: str):
+        """右键菜单获取字段列表 - 确认后配置参数"""
+        # 1. 确认
+        reply = QMessageBox.question(
+            self, "确认获取",
+            f"确定要获取表 '{table_name}' 的字段列表吗？\n\n这将会启动一个新的扫描任务。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # 2. 配置扫描参数
+        # 设置目标数据库（会自动勾选）
+        self.scan_panel.set_target_db(db_name)
+
+        # 设置目标表（会自动勾选）
+        self.scan_panel.set_target_table(table_name)
+
+        # 勾选枚举字段选项
+        self.scan_panel.columns_check.setChecked(True)
+
+        # 3. 提示用户
+        QMessageBox.information(
+            self, "准备就绪",
+            f"已配置获取表 '{table_name}' 的字段列表参数。\n\n请点击 '开始扫描' 按钮启动任务。"
+        )
+
+    def _on_dump_table_requested(self, db_name: str, table_name: str):
+        """右键菜单提取表数据 - 确认后配置参数"""
+        # 1. 确认
+        reply = QMessageBox.question(
+            self, "确认提取",
+            f"确定要提取表 '{table_name}' 的数据吗？\n\n这将会启动一个新的扫描任务。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # 2. 配置扫描参数
+        # 设置目标数据库（会自动勾选）
+        self.scan_panel.set_target_db(db_name)
+
+        # 设置目标表（会自动勾选）
+        self.scan_panel.set_target_table(table_name)
+
+        # 设置 dump 模式
+        self.scan_panel.set_dump(True)
+
+        # 3. 提示用户
+        QMessageBox.information(
+            self, "准备就绪",
+            f"已配置提取表 '{table_name}' 的数据参数。\n\n请点击 '开始扫描' 按钮启动任务。"
+        )
+
     def _show_ai_analyze(self):
         """显示 AI 分析（切换到 AI 分析标签页）"""
         # 找到右侧面板的标签页并切换到 AI 分析

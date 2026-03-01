@@ -45,12 +45,19 @@ class SqlmapEngine(QThread):
             'tables': {},                  # 表列表 {db: [tables]}
             'columns': {},                 # 列列表 {(db, table): [columns]}
             'data': {},                    # 数据内容
+            'batch_results': [],           # 批量扫描结果列表
         }
-        
+
         # 进度追踪
         self.progress = 0
         self.total_tests = 0
         self.current_test = 0
+
+        # 批量扫描追踪
+        self._current_scan_url = None     # 当前正在扫描的 URL
+        self._url_scan_results = {}        # {url: result_dict}
+        # 检测是否为批量模式（更宽松的检测）
+        self._is_batch_mode = '-m' in command or '--multiple-targets' in command
     
     def run(self):
         """执行 sqlmap 命令"""
@@ -114,6 +121,9 @@ class SqlmapEngine(QThread):
             try:
                 # 保存未保存的数据
                 self._save_data_buffer()
+                # 保存当前 URL 的批量扫描结果
+                if self._is_batch_mode and self._current_scan_url:
+                    self._save_current_url_result()
                 self.result_found.emit(self.results)
                 self.scan_finished.emit(return_code)
                 
@@ -261,24 +271,25 @@ class SqlmapEngine(QThread):
             self._parsing_databases = True
             self._parsing_tables = False
             self._parsing_columns = False
-        elif hasattr(self, '_parsing_databases') and self._parsing_databases:
-            # 如果遇到空行或新的段落，停止解析
-            if line.startswith("[INFO]") or line.startswith("[WARNING]"):
-                self._parsing_databases = False
-            elif line.startswith("[*]"):
+
+        # 解析 [*] 开头的数据库名（独立判断，不依赖 elif）
+        if line.startswith("[*]"):
+            if hasattr(self, '_parsing_databases') and self._parsing_databases:
                 db = line[3:].strip().strip("'\"")
-                # 更严格的数据库名过滤（不过滤 information_schema 等系统库）
-                invalid_patterns = [
-                    'NULL', 'None', '', 'Database', 'available', 'fetching', 
-                    'the back-end', 'web server', 'web application', 'target',
-                    'starting', 'testing', 'heuristic',
-                    'enumerate', 'entries', 'table(s)', 'tables'
+                # 过滤无效的数据库名
+                invalid_keywords = [
+                    'starting', 'ending', 'shutting'  # SQLMap 状态行
                 ]
-                if db and not any(inv.lower() in db.lower() for inv in invalid_patterns):
-                    # 检查是否是有效的数据库名格式（不包含太多特殊字符和空格）
-                    if len(db) < 64 and not db.startswith('[') and ':' not in db and ' ' not in db:
+                # 检查是否是有效的数据库名
+                if db and not any(kw in db.lower() for kw in invalid_keywords):
+                    # 检查格式：不能包含 @ 符号（排除 "starting @ 17:11:26" 这种）
+                    if '@' not in db and len(db) < 64:
                         if db not in self.results['databases']:
                             self.results['databases'].append(db)
+        elif hasattr(self, '_parsing_databases') and self._parsing_databases:
+            # 遇到 [INFO] 或 [WARNING] 且不是 [*] 行时，停止解析
+            if (line.startswith("[") and "] [INFO]" in line) or "] [WARNING]" in line:
+                self._parsing_databases = False
         
         # 检测表列表开始 - 格式: "Database: xxx" 后面跟着表格
         # 注意：只匹配单独的 "Database: xxx" 行，不是警告信息
@@ -551,7 +562,11 @@ class SqlmapEngine(QThread):
                 end_keywords = ["dump", "file", "table", "fetched", "stored", "written", "entries"]
                 if any(kw in line.lower() for kw in end_keywords):
                     self._save_data_buffer()
-        
+
+        # 批量扫描：检测当前扫描的 URL
+        if self._is_batch_mode:
+            self._detect_batch_url(line)
+
         # 进度估算
         if "testing" in line.lower():
             self.current_test += 1
@@ -562,6 +577,132 @@ class SqlmapEngine(QThread):
         # 完成时设置进度为100
         if "all tested parameters" in line.lower() or "sqlmap identified" in line.lower():
             self.progress_updated.emit(100)
+            # 批量扫描：保存当前 URL 的结果
+            self._save_current_url_result()
+
+    def _detect_batch_url(self, line: str):
+        """检测批量扫描中当前正在扫描的 URL"""
+        line_lower = line.lower()
+
+        # 检测到新 URL 开始扫描 - 多种格式匹配
+        # 格式1: [INFO] testing URL: http://example.com/?id=1
+        # 格式2: [INFO] target URL: http://example.com/?id=1
+        # 格式3: [1/3] URL: GET http://example.com/?id=1
+        is_new_url = any(keyword in line_lower for keyword in ["testing url:", "target url:"])
+        is_list_url = re.match(r'\[\d+/\d+\]\s+url:', line_lower)
+
+        if is_new_url or is_list_url:
+            # 先保存之前 URL 的结果
+            if self._current_scan_url:
+                self._save_current_url_result()
+
+            # 提取当前 URL - 多种格式匹配
+            match = re.search(r'(https?://[^\s\]\|>]+)', line)
+            if not match:
+                # 尝试匹配 GET/POST 开头的URL（可能有换行）
+                match = re.search(r'(https?://[^\s]+)', line)
+
+            if not match and "url:" in line_lower:
+                # 尝试在下一行获取URL（可能是独立一行）
+                pass
+
+            if match:
+                url = match.group(1).strip()
+                # 清理URL
+                url = url.rstrip('.,;:')
+                if url and (url.startswith('http://') or url.startswith('https://')):
+                    # 避免重复处理同一个URL
+                    if url != self._current_scan_url:
+                        self._current_scan_url = url
+                        # 重置当前 URL 的结果数据
+                        self._url_scan_results[self._current_scan_url] = {
+                            'url': self._current_scan_url,
+                            'injection_found': False,
+                            'injection_type': [],
+                            'dbms': '',
+                            'current_db': '',
+                            'current_user': '',
+                            'databases': [],
+                            'tables': {},
+                            'columns': {},
+                            'data': {},
+                            'status': 'scanning',
+                        }
+                        # 重置主results缓冲区
+                        self._reset_results_for_new_url()
+                        # 发送状态更新信号
+                        self.status_changed.emit(f"正在扫描: {self._current_scan_url[:50]}...")
+
+        # 检测到 URL 被跳过 (sqlmap 在发现注入后默认跳过其他URL)
+        if "skipping" in line_lower and "url:" in line_lower:
+            match = re.search(r"skipping\s+'([^']+)'", line)
+            if match:
+                skipped_url = match.group(1).strip()
+                # 记录被跳过的URL
+                if skipped_url not in self._url_scan_results:
+                    self._url_scan_results[skipped_url] = {
+                        'url': skipped_url,
+                        'injection_found': False,
+                        'injection_type': [],
+                        'dbms': '',
+                        'current_db': '',
+                        'current_user': '',
+                        'databases': [],
+                        'tables': {},
+                        'columns': {},
+                        'data': {},
+                        'status': 'skipped',  # 被跳过
+                    }
+                else:
+                    self._url_scan_results[skipped_url]['status'] = 'skipped'
+                # 输出提示
+                self.output_received.emit(f"[批量] URL 被跳过: {skipped_url}\n")
+
+    def _reset_results_for_new_url(self):
+        """为新URL重置结果缓冲区"""
+        self.results['injection_found'] = False
+        self.results['injection_type'] = []
+        self.results['dbms'] = ''
+        self.results['current_db'] = ''
+        self.results['current_user'] = ''
+        self.results['databases'] = []
+        self.results['tables'] = {}
+        self.results['columns'] = {}
+        self.results['data'] = {}
+
+    def _save_current_url_result(self):
+        """保存当前 URL 的扫描结果到列表"""
+        if not self._current_scan_url or self._current_scan_url not in self._url_scan_results:
+            return
+
+        # 从当前 results 中复制当前 URL 的数据
+        result = self._url_scan_results[self._current_scan_url]
+        result['status'] = 'completed'
+
+        # 从当前解析结果中获取数据
+        result['injection_found'] = self.results.get('injection_found', False)
+        result['injection_type'] = self.results.get('injection_type', []).copy()
+        result['dbms'] = self.results.get('dbms', '')
+        result['current_db'] = self.results.get('current_db', '')
+        result['current_user'] = self.results.get('current_user', '')
+        result['databases'] = self.results.get('databases', []).copy()
+        result['tables'] = self.results.get('tables', {}).copy()
+        result['columns'] = self.results.get('columns', {}).copy()
+        result['data'] = self.results.get('data', {}).copy()
+
+        # 添加到批量结果列表（如果不在列表中）
+        if result not in self.results['batch_results']:
+            self.results['batch_results'].append(result.copy())
+
+        # 发送单个 URL 完成信号
+        if result['injection_found']:
+            self.output_received.emit(f"[批量] URL {self._current_scan_url} 发现漏洞!\n")
+
+    def get_batch_results(self) -> list:
+        """获取批量扫描结果列表"""
+        # 先保存当前 URL 的结果
+        self._save_current_url_result()
+        return self.results.get('batch_results', [])
 
 
 class SqlmapFinder:

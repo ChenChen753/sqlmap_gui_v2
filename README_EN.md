@@ -13,6 +13,7 @@
 - ⚡ **Quick Config** - Quick/Standard/Deep/Aggressive presets
 - 🛡️ **Tamper Scripts** - 70+ bypass scripts in 7 categories
 - 📊 **Result Display** - Real-time logs, DB structure tree, data extraction
+- 📂 **Batch Scan** - Scan multiple URLs from file, each URL scanned independently
 - 💾 **Config Management** - Save/Load scan configurations
 
 ## 📋 Requirements
@@ -48,7 +49,18 @@ python main.py
 
 1. Enter URL in the **Target** tab
 2. Optionally set POST data, Cookie, User-Agent
-3. Supports batch URL import from file
+3. **Batch Scan**: Check "Batch URL Scan" and select a file containing URLs (one per line)
+
+### Batch Scan Feature
+
+The batch scan feature allows scanning multiple URLs from a file:
+- **Independent Scanning**: Each URL is scanned independently, ensuring complete detection for every target
+- **No Skip**: Unlike SQLMap's built-in batch mode, this feature scans all URLs completely
+- **Real-time Progress**: Status bar shows current progress `[1/3]`, `[2/3]`, etc.
+- **Result Table**: Dedicated tab displays all scan results in a table format
+- **Filtering**: Filter results by "All", "Vulnerable", "Safe", "Skipped"
+- **Export**: Export batch results to CSV or JSON
+- **Copy to Clipboard**: Quick copy results for sharing
 
 ### 2️⃣ Select Scan Mode
 

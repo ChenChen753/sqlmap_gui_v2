@@ -4,6 +4,9 @@
 # PyQt6 - 图形界面框架
 PyQt6>=6.4.0
 
+# requests - AI 分析功能需要
+requests>=2.28.0
+
 # Python 3.7+ 内置模块（无需安装）:
 # - configparser (配置文件解析)
 # - sqlite3 (数据库)
@@ -11,3 +14,8 @@ PyQt6>=6.4.0
 # - re (正则表达式)
 # - os, sys (系统操作)
 # - datetime (时间处理)
+# - json (JSON 处理)
+# - urllib (网络请求)
+# - typing (类型提示)
+# - dataclasses (数据类)
+# - enum (枚举)

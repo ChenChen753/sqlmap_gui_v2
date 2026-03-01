@@ -112,6 +112,7 @@ class TargetPanel(QWidget):
         url_card.add_widget(self.request_content_label)
         
         self.request_content = QTextEdit()
+        self.request_content.setAcceptRichText(False)  # 禁用富文本粘贴
         self.request_content.setPlaceholderText(
             "粘贴完整的 HTTP 请求包内容，例如:\n\n"
             "GET /page.php?id=1 HTTP/1.1\n"
@@ -313,13 +314,34 @@ class TargetPanel(QWidget):
         if self.request_check.isChecked():
             return self.request_input.text().strip()
         return ""
-    
+
     def get_request_content(self) -> str:
         """获取请求包内容"""
         if self.request_check.isChecked():
-            return self.request_content.toPlainText().strip()
+            content = self.request_content.toPlainText().strip()
+            # 清理不可见字符和特殊字符
+            content = self._clean_request_content(content)
+            return content
         return ""
-    
+
+    def _clean_request_content(self, content: str) -> str:
+        """清理请求包中的特殊字符"""
+        if not content:
+            return content
+
+        # 移除 BOM 头
+        if content.startswith('\ufeff'):
+            content = content[1:]
+
+        # 移除其他不可见控制字符（保留常见的换行和空格）
+        cleaned = []
+        for char in content:
+            # 保留：可打印字符、Tab、换行、回车
+            if char.isprintable() or char in '\t\n\r':
+                cleaned.append(char)
+            # 跳过其他控制字符
+        return ''.join(cleaned)
+
     def use_random_agent(self) -> bool:
         """是否使用随机 User-Agent"""
         return self.ua_check.isChecked() and self.ua_combo.currentIndex() == 0

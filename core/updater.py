@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 
 # 当前版本号
-CURRENT_VERSION = "2.2.3"
+CURRENT_VERSION = "2.3.0"
 
 
 @dataclass
